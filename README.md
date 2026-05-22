@@ -191,7 +191,7 @@ This opens the backend and frontend in separate terminal windows so you can see 
 | `GET`   | `/senders/{id}/preview` | Returns subject, snippet, and date of a sender's latest email    |
 | `POST`  | `/senders/{id}/trash`   | Starts a batch-trash job for a sender; returns a `job_id`        |
 | `POST`  | `/senders/{id}/block`   | Creates a Gmail filter to auto-trash future emails from a sender |
-| `POST`  | `/senders/bulk/trash`   | Starts batch-trash jobs for multiple senders; returns `job_id`s  |
+| `POST`  | `/senders/bulk/trash`   | Starts batch-trash jobs for multiple senders; returns `job_id`'s  |
 | `POST`  | `/senders/bulk/block`   | Creates Gmail filters for multiple senders at once               |
 | `POST`  | `/senders/bulk/skip`    | Acknowledges a client-side skip (no Gmail API call made)         |
 | `GET`   | `/settings`             | Returns the current user's settings for this session             |
@@ -204,4 +204,4 @@ Long-lived connections where the backend streams progress events to the client i
 | Method | Endpoint                              | Description                                                                                                                                                                     |
 | ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/scan/{id}/stream`                   | Real-time scan progress; fires `sender_found` events as senders are flagged, then `done` when complete                                                                          |
-| `GET`  | `/senders/{id}/trash/{job_id}/stream` | Deletion progress for a single trash job; used for both individual and bulk trash — the bulk REST endpoint returns multiple `job_id`s and the frontend opens one stream per job |
+| `GET`  | `/senders/{id}/trash/{job_id}/stream` | Deletion progress for a single trash job; used for both individual and bulk trash — the bulk REST endpoint returns multiple `job_id`'s and the frontend opens one stream per job |
