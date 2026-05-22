@@ -1,4 +1,4 @@
-# **Gmail Cleaner**
+# **Gmail Cleaner: Cleanse Your Inbox...**
 
 ### _Copyright (c) 2026, Rye Stahle-Smith_
 
