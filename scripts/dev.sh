@@ -8,18 +8,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 
-# ── Backend ────────────────────────────────────────────────────────────────────
-if [ ! -f "$BACKEND/.venv/bin/python" ]; then
-  echo "Creating Python virtual environment..."
-  python -m venv "$BACKEND/.venv"
-  "$BACKEND/.venv/bin/pip" install -e "$BACKEND" --quiet
-fi
-
-echo "Starting FastAPI backend on http://localhost:8000..."
-cd "$BACKEND"
-"$BACKEND/.venv/bin/python" -m uvicorn app.main:app --reload --port 8000 &
-BACKEND_PID=$!
-
 # ── Frontend ───────────────────────────────────────────────────────────────────
 if [ ! -d "$FRONTEND/node_modules" ]; then
   echo "Installing npm dependencies..."
@@ -28,20 +16,33 @@ fi
 
 # Helper to open a command in a new terminal window where possible.
 # Usage: open_in_terminal "<command>" pid_var_name
+escape_apple_script_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
+}
+
 open_in_terminal() {
   local cmd="$1"
   local _pid_var="$2"
 
-  # Windows (Git Bash / MINGW): use cmd.exe start to open a new window running bash -lc
-  if command -v cmd.exe >/dev/null 2>&1 && [[ "$(uname -s)" =~ MINGW|MSYS|CYGWIN ]]; then
-    cmd.exe /C start "" bash -lc "$cmd"
+  # macOS Terminal.app
+  if [ "$(uname)" = "Darwin" ]; then
+    local escaped_cmd
+    escaped_cmd="$(escape_apple_script_string "$cmd")"
+    osascript <<OSA
+tell application "Terminal"
+  do script "$escaped_cmd"
+end tell
+OSA
     eval "$_pid_var=''"
     return 0
   fi
 
-  # macOS Terminal.app
-  if [ "$(uname)" = "Darwin" ]; then
-    osascript -e "tell application \"Terminal\" to do script \"$cmd\""
+  # Windows (Git Bash / MINGW): use cmd.exe start to open a new window running bash -lc
+  if command -v cmd.exe >/dev/null 2>&1 && [[ "$(uname -s)" =~ MINGW|MSYS|CYGWIN ]]; then
+    cmd.exe /C start "" bash -lc "$cmd"
     eval "$_pid_var=''"
     return 0
   fi
@@ -66,7 +67,7 @@ open_in_terminal() {
   # Fallback: run in background in this shell and return the PID
   bash -c "$cmd" &
   eval "$_pid_var=$!"
-  return 1
+  return 0
 }
 
 PYTHON_BIN="$BACKEND/.venv/bin/python"
@@ -76,6 +77,12 @@ fi
 
 BACKEND_CMD="cd '$BACKEND' ; echo 'FastAPI backend starting on http://localhost:8000' ; \"$PYTHON_BIN\" -m uvicorn app.main:app --reload --port 8000"
 FRONTEND_CMD="cd '$FRONTEND' ; echo 'Vite frontend starting on http://localhost:5173' ; npm run dev"
+
+if [ ! -f "$BACKEND/.venv/bin/python" ]; then
+  echo "Creating Python virtual environment..."
+  python -m venv "$BACKEND/.venv"
+  "$BACKEND/.venv/bin/pip" install -e "$BACKEND" --quiet
+fi
 
 echo "Opening backend window..."
 open_in_terminal "$BACKEND_CMD" BACKEND_PID

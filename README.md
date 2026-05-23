@@ -64,8 +64,8 @@ Gmail_Cleaner/
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
-- A [Google Cloud](https://console.cloud.google.com) project with the **Gmail API** enabled and **OAuth 2.0 credentials** created
+- Node.js 24+
+- A [Google Cloud](https://console.cloud.google.com) project
 
 ---
 
@@ -75,19 +75,13 @@ Gmail_Cleaner/
 
 2. Enable the **Gmail API** under _APIs & Services → Library_
 
-3. Under _APIs & Services → OAuth consent screen_, choose **External** user type and add the following scopes:
+3. Under _APIs & Services → Credentials_, create an **OAuth 2.0 Client ID** (Application type: **Web application**)
+
+4. Add the following to **Authorized JavaScript Origins**:
 
    ```
-   https://mail.google.com/
-   https://www.googleapis.com/auth/gmail.settings.basic
-   https://www.googleapis.com/auth/gmail.settings.sharing
-   https://www.googleapis.com/auth/userinfo.email
-   openid
+   http://localhost:5173
    ```
-
-   Add your Gmail address as a **test user**
-
-4. Under _APIs & Services → Credentials_, create an **OAuth 2.0 Client ID** (Application type: **Web application**)
 
 5. Add the following to **Authorized redirect URIs**:
 
