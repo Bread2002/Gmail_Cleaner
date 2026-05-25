@@ -1,10 +1,10 @@
-"""
-FastAPI dependency: get_gmail_service
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: FastAPI dependencies for the Gmail Cleaner backend
+#              Provides shared logic for validating sessions and creating Gmail API service objects.
 
-Validates the session token from the Authorization header,
-refreshes credentials if expired, and returns a ready-to-use Gmail service.
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 from typing import Annotated, Any
@@ -15,9 +15,8 @@ from googleapiclient.discovery import build
 from app import store
 from app.services.gmail_auth import refresh_if_expired
 
-
+# Define a helper function to resolve a session token and return the session dict
 def _resolve_session(session_token: str) -> dict:
-    """Shared logic: validate session token and return session dict."""
     session = store.session.get_session(session_token)
     if session is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
@@ -30,11 +29,10 @@ def _resolve_session(session_token: str) -> dict:
 
     return session
 
-
+# Define a helper function to extract the session from the Authorization header (for REST endpoints)
 def get_session_from_header(
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict:
-    """Dependency for standard REST endpoints (Authorization: Bearer <token>)."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401, detail="Missing or invalid Authorization header"
@@ -42,29 +40,22 @@ def get_session_from_header(
     session_token = authorization.removeprefix("Bearer ").strip()
     return _resolve_session(session_token)
 
-
+# Define a helper function to extract the session from a query parameter (for SSE endpoints)
 def get_session_from_query(
     token: Annotated[str | None, Query()] = None,
 ) -> dict:
-    """
-    Dependency for SSE endpoints.
-    The browser's native EventSource cannot send custom headers,
-    so the session token is passed as ?token=... query parameter.
-    """
     if not token:
         raise HTTPException(status_code=401, detail="Missing token query parameter")
     return _resolve_session(token)
 
-
+# Define a helper function to create a Gmail API service object for the authenticated user
 def get_gmail_service(
     session: Annotated[dict, Depends(get_session_from_header)],
 ) -> Any:
-    """Returns a Gmail API service object for the authenticated user."""
     return build("gmail", "v1", credentials=session["credentials"])
 
-
+# Define a helper function to create a Gmail API service object for SSE endpoints
 def get_gmail_service_from_query(
     session: Annotated[dict, Depends(get_session_from_query)],
 ) -> Any:
-    """Same as get_gmail_service but reads token from query param (for SSE routes)."""
     return build("gmail", "v1", credentials=session["credentials"])

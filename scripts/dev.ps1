@@ -1,54 +1,58 @@
-# Gmail Cleaner — start both backend and frontend for local development
-# Usage: .\scripts\dev.ps1   (run from the project root or the scripts\ folder)
-# Requirements: Python 3.11+, Node 18+
-#
-# Opens two separate PowerShell windows so you can see live logs from each server.
-# Close either window or press Ctrl+C in it to stop that process.
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: PowerShell script to start both the FastAPI backend and Vite frontend in development mode.
+#              Sets up a Python virtual environment for the backend if it doesn't exist.
+#              Launches each in a new terminal window where possible. 
 
+# Determine project root
 $root = Split-Path -Parent $PSScriptRoot
 
-# ── Backend ──────────────────────────────────────────────────────────────────
+# Determine the backend directory and paths to the Python virtual environment executables
 $backendDir = Join-Path $root "backend"
 $venvPython = Join-Path $backendDir ".venv\Scripts\python.exe"
 $venvPip = Join-Path $backendDir ".venv\Scripts\pip.exe"
 
+# Create the Python virtual environment (if it doesn't exist) and install the backend dependencies
 if (-not (Test-Path $venvPython)) {
     Write-Host "Creating Python virtual environment..." -ForegroundColor Yellow
     python -m venv (Join-Path $backendDir ".venv")
     & $venvPip install -e "$backendDir" --quiet
 }
 
+# Define the command to start the backend server
 $backendCmd = @"
 `$env:PYTHONUNBUFFERED = '1'
 Set-Location '$backendDir'
-Write-Host 'FastAPI backend starting on http://localhost:8000' -ForegroundColor Green
 & '$venvPython' -m uvicorn app.main:app --reload --port 8000
 "@
 
-Write-Host "Opening backend window..." -ForegroundColor Green
+# Start the backend server in a new terminal window
+Write-Host "Starting the backend..." -ForegroundColor Green
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
 
-# ── Frontend ─────────────────────────────────────────────────────────────────
+# Determine the frontend directory
 $frontendDir = Join-Path $root "frontend"
 
+# Install dependencies for the frontend
 if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
     Write-Host "Installing npm dependencies..." -ForegroundColor Yellow
     npm install --prefix $frontendDir
 }
-
+# Define the command to start the frontend server
 $frontendCmd = @"
 Set-Location '$frontendDir'
-Write-Host 'Vite frontend starting on http://localhost:5173' -ForegroundColor Cyan
 npm run dev
 "@
 
-Write-Host "Opening frontend window..." -ForegroundColor Cyan
+# Start the frontend server in a new terminal window
+Write-Host "Starting the frontend..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendCmd
 
+# Display instructions to the user
 Write-Host ""
-Write-Host "Two terminal windows have been opened:" -ForegroundColor White
-Write-Host "  Backend  (Python/uvicorn): http://localhost:8000" -ForegroundColor Green
-Write-Host "  Frontend (Vite):           http://localhost:5173" -ForegroundColor Cyan
-Write-Host "  API docs:                  http://localhost:8000/docs" -ForegroundColor Gray
+Write-Host "Both servers are running in their respective terminals:" -ForegroundColor White
+Write-Host "Backend  (Python/uvicorn): http://localhost:8000" -ForegroundColor Green
+Write-Host "Frontend (Vite): http://localhost:5173" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Close either window to stop that server." -ForegroundColor Gray
+Write-Host "Close either window to stop that server..." -ForegroundColor Gray

@@ -1,11 +1,9 @@
-"""
-Scan router — /scan/*
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Defines API endpoints for email scanning operations (start scan, stream progress via SSE, and get results) with authentication via session tokens.
 
-POST /scan/start         → kick off background scan, return scan_id
-GET  /scan/{id}/stream   → SSE stream of scan progress (token via query param)
-GET  /scan/{id}/results  → polling fallback for completed scan
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
@@ -26,11 +24,15 @@ from app.dependencies import (
 from app.services import gmail_scan
 from app import store
 
+# Define the API router for scan-related endpoints with a prefix and tags for documentation
 router = APIRouter(prefix="/scan", tags=["scan"])
+
+# Initialize logging for this module
 log = logging.getLogger("gmail_cleaner.routers.scan")
 
 
-def _session_token(session: dict) -> str:
+# Define a helper function to retrieve the session token associated with a given session dictionary (used for logging and session management)
+def _get_session_token(session: dict) -> str:
     from app.store.session import _sessions
 
     token = next((t for t, s in _sessions.items() if s is session), None)
@@ -39,15 +41,16 @@ def _session_token(session: dict) -> str:
     return token
 
 
+# Define the POST endpoint to start a new email scan (requires authentication via session token)
 @router.post("/start", response_model=ScanStartResponse)
 async def start_scan(
     body: ScanRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
 ) -> ScanStartResponse:
-    """Start a background scan. Returns a scan_id to subscribe to the SSE stream."""
+    """Start a new email scan with the specified parameters (requires authentication via session token)."""
     scan_id = str(uuid.uuid4())
-    session_token = _session_token(session)
+    session_token = _get_session_token(session)
 
     log.info(
         "Starting scan %s for session …%s (dry_run=%s, threshold=%d, max_senders=%d)",
@@ -87,7 +90,7 @@ async def start_scan(
         )
     )
 
-    # Log any unhandled exception that escapes run_scan (shouldn't happen, but safety net)
+    # Define a helper function that logs any unhandled exceptions from the scan task (to prevent silent failures)
     def _on_task_done(t: asyncio.Task) -> None:
         if not t.cancelled() and t.exception():
             log.error(
@@ -96,21 +99,20 @@ async def start_scan(
                 exc_info=t.exception(),
             )
 
+    # Attach the exception-logging callback to the task
     task.add_done_callback(_on_task_done)
 
     return ScanStartResponse(scan_id=scan_id)
 
 
+# Define the GET endpoint to stream scan progress events via Server-Sent Events (SSE) (requires authentication via session token)
 @router.get("/{scan_id}/stream")
 async def scan_stream(
     scan_id: str,
     session: Annotated[dict, Depends(get_session_from_query)],
 ) -> StreamingResponse:
-    """
-    SSE stream of scan progress events.
-    Token passed as ?token= query param because EventSource doesn't support headers.
-    """
-    session_token = _session_token(session)
+    """Stream scan progress events via Server-Sent Events (SSE) (requires authentication via session token)."""
+    session_token = _get_session_token(session)
     queue = store.session.get_queue(session_token, scan_id)
     if queue is None:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -120,18 +122,17 @@ async def scan_stream(
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
             while True:
-                # ── CRITICAL FIX: handle timeout inside the loop ─────────────
-                # The outer try/except caused the generator to EXIT on timeout.
-                # Now we catch TimeoutError per-iteration and continue looping.
+                # Handle timeout inside the loop to prevent connection timeouts
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=60.0)
                 except asyncio.TimeoutError:
                     # Send a heartbeat comment so the browser doesn't close the connection
                     log.debug("SSE heartbeat sent for scan %s", scan_id)
-                    yield ": heartbeat\n\n"
+                    yield ": heartbeat\n\n"  # "I'm alive" comment to keep the connection open
                     continue
 
-                if event is None:  # sentinel — scan finished
+                # If the event is None, it signals that the scan is complete and the stream should be closed
+                if event is None:
                     log.info(
                         "SSE stream for scan %s received sentinel, closing", scan_id
                     )
@@ -160,13 +161,14 @@ async def scan_stream(
     )
 
 
+# Define the GET endpoint to retrieve the current results of a scan (requires authentication via session token)
 @router.get("/{scan_id}/results", response_model=ScanResult)
 async def scan_results(
     scan_id: str,
     session: Annotated[dict, Depends(get_session_from_header)],
 ) -> ScanResult:
-    """Polling fallback: return current scan results."""
-    session_token = _session_token(session)
+    """Retrieve the current results of a scan (requires authentication via session token)."""
+    session_token = _get_session_token(session)
     result = store.session.get_scan_result(session_token, scan_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Scan not found")

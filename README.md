@@ -42,7 +42,11 @@ Gmail_Cleaner/
 │       │   ├── gmail_scan.py       # Consecutive-unread detection
 │       │   ├── gmail_trash.py      # Batch message deletion
 │       │   └── gmail_filter.py     # Gmail filter creation (blocking)
-│       └── store/                  # In-memory session + job queue store
+│       ├── store/                  # In-memory session + job queue store
+│       └── tests/                  # Pytest suites
+│           ├── api/                # API-related unit tests
+│           ├── services/           # Service-related unit tests
+│           └── conftest.py         # General testing config
 ├── frontend/                       # React + TypeScript (Vite) frontend
 │   └── src/
 │       ├── App.tsx                 # Root app + routing
@@ -167,6 +171,32 @@ bash scripts/dev.sh
 ```
 
 This opens the backend and frontend in separate terminal windows so you can see live logs from each server.
+
+---
+
+## 🧪 Testing the Backend
+
+Quick instructions for running the Python test suite from the project root.
+
+- Install the package and development dependencies (**DO FIRST**):
+
+```bash
+.venv/bin/activate
+pip install -e '.[dev]'
+```
+
+- Run the full test suite with `pytest`:
+
+```bash
+pytest
+```
+
+- Run a single file or test (e.g., services)
+
+```bash
+pytest tests/services/test_services.py -q
+pytest tests/services/test_services.py::TestSessionStore::test_create_and_retrieve_session -q
+```
 
 ---
 

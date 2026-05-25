@@ -1,20 +1,9 @@
-"""
-Permanent email deletion — replaces the old move-to-trash approach.
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Implements the permanent email deletion logic, replacing old methods which purely moved emails to the trash.
 
-Changes vs original:
-- Uses messages.batchDelete (permanent, up to 1000 IDs per call) instead of
-  messages.trash (which only moves to the Trash label for 30 days).
-- Requires the https://mail.google.com/ scope instead of gmail.modify.
-- Query is "from:X" with no -in:trash filter — catches messages already sitting
-  in Trash from previous runs as well as inbox/other messages.
-- No cleanup pass needed: batchDelete is atomic per batch, no pagination race.
-- No verification step: deleted means gone, nothing to count afterwards.
-- run_in_executor wraps each batchDelete call (blocking I/O in thread pool).
-- Progress events emitted to asyncio.Queue after each batch.
-- dry_run mode skips actual API calls but still reports what would happen.
-- _execute_with_backoff retries 403/429 rate-limit errors with exponential backoff.
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
@@ -24,18 +13,15 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
+# Initialize logging for this module
 log = logging.getLogger("gmail_cleaner.trash")
 
-# Maximum IDs per batchDelete call (Gmail API limit).
+# Configure the maximum IDs per batchDelete call (Gmail API limit).
 _BATCH_SIZE = 1000
 
 
+# Define a helper function to execute a Google API request with exponential backoff on rate-limit errors (403/429).
 def _execute_with_backoff(request: Any, max_retries: int = 5) -> Any:
-    """
-    Execute a Google API request, retrying with exponential backoff on
-    rate-limit errors (403 rateLimitExceeded / 429 Too Many Requests).
-    Runs in a thread-pool executor — time.sleep() is safe here.
-    """
     for attempt in range(max_retries):
         try:
             return request.execute()
@@ -53,6 +39,7 @@ def _execute_with_backoff(request: Any, max_retries: int = 5) -> Any:
                 raise
 
 
+# Define the main function to permanently delete all messages from a specified sender, emitting progress events to a queue
 async def run_trash(
     service: Any,
     queue: asyncio.Queue,
@@ -60,15 +47,6 @@ async def run_trash(
     dry_run: bool,
     store_result_fn: Any,
 ) -> None:
-    """
-    Background task: permanently deletes all messages from sender_email
-    using messages.batchDelete (up to 1000 IDs per API call).
-
-    Unlike the old approach this catches messages already sitting in Trash
-    and removes them immediately rather than waiting for Gmail's 30-day purge.
-
-    Emits SSE progress events to `queue`.
-    """
     loop = asyncio.get_running_loop()
     log.info("Delete job starting for sender=%r dry_run=%s", sender_email, dry_run)
 
@@ -80,9 +58,7 @@ async def run_trash(
         await queue.put({"type": event_type, "data": data})
 
     try:
-        # ── Fetch ALL messages from sender ───────────────────────────────────
-        # No -in:trash filter — we want everything: inbox, sent, spam, trash.
-        # batchDelete handles already-deleted IDs gracefully (no error).
+        # Fetch all messages from the sender
         sender_messages: list[dict] = []
         page_token = None
         while True:
@@ -130,10 +106,7 @@ async def run_trash(
             )
             return
 
-        # ── Permanently delete in batches of 1000 ───────────────────────────
-        # batchDelete is a single POST with a JSON body of IDs — far fewer API
-        # calls than the old batch-HTTP-request approach (1000 vs 50 per call).
-        # It returns 204 No Content on success; HttpError on failure.
+        # Permanently delete in batches of 1000
         message_batches = [
             sender_messages[i : i + _BATCH_SIZE]
             for i in range(0, len(sender_messages), _BATCH_SIZE)
@@ -145,9 +118,9 @@ async def run_trash(
             ids = [m["id"] for m in batch_messages]
             await api(
                 lambda id_list=ids: _execute_with_backoff(
-                    service.users().messages().batchDelete(
-                        userId="me", body={"ids": id_list}
-                    )
+                    service.users()
+                    .messages()
+                    .batchDelete(userId="me", body={"ids": id_list})
                 )
             )
             deleted_so_far += len(batch_messages)
@@ -172,4 +145,4 @@ async def run_trash(
     except Exception as exc:
         await emit("error", {"detail": str(exc)})
     finally:
-        await queue.put(None)  # SSE sentinel
+        await queue.put(None)  # Closes the SSE stream

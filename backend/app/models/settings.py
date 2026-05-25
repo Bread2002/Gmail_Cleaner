@@ -1,7 +1,15 @@
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Defines Pydantic models for user settings and settings updates, including validation rules and default values.
+#              These models are used for storing user preferences and handling settings update requests in the application.
+
+# Import necessary libraries and modules
 from pydantic import BaseModel, Field
 from typing import Optional
 
 
+# Define a Pydantic model for user settings with validation rules and default values
 class UserSettings(BaseModel):
     consecutive_unread_threshold: int = Field(
         default=20,
@@ -26,6 +34,7 @@ class UserSettings(BaseModel):
     )
 
 
+# Define a Pydantic model for updating user settings, allowing partial updates with optional fields
 class SettingsPatch(BaseModel):
     consecutive_unread_threshold: Optional[int] = Field(default=None, ge=1, le=500)
     max_senders: Optional[int] = Field(default=None, ge=1, le=100)

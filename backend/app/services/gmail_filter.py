@@ -1,12 +1,9 @@
-"""
-Gmail filter creation — async port of stop_sender() from original main.py.
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Implements the filter creation logic for blocking senders in Gmail.
 
-Changes vs original:
-- Returns filter_id instead of printing
-- Raises HTTPException instead of silently printing errors
-- Async (run_in_executor wraps the blocking API call)
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
@@ -16,13 +13,8 @@ from fastapi import HTTPException
 from googleapiclient import errors as google_errors
 
 
+# Define a helper function to create a Gmail filter that trashes future emails from a specified sender
 async def create_block_filter(service: Any, sender_email: str) -> str:
-    """
-    Create a Gmail filter that permanently trashes future emails from sender_email.
-
-    Ported from stop_sender() in original main.py (lines 40–58).
-    Returns the created filter's ID.
-    """
     loop = asyncio.get_event_loop()
 
     filter_request = {

@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# Gmail Cleaner — start both backend and frontend for local development
-# Usage: bash scripts/dev.sh
-# Requirements: Python 3.11+, Node 18+
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Bash script to start both the FastAPI backend and Vite frontend in development mode.
+#              Sets up a Python virtual environment for the backend if it doesn't exist.
+#              Launches each in a new terminal window where possible. 
 
-set -e
+set -e  # Exit immediately on any error
+
+# Determine project root and subdirectories
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 
-# ── Frontend ───────────────────────────────────────────────────────────────────
+# Install dependencies for the frontend
 if [ ! -d "$FRONTEND/node_modules" ]; then
   echo "Installing npm dependencies..."
   npm install --prefix "$FRONTEND"
 fi
 
-# Helper to open a command in a new terminal window where possible.
-# Usage: open_in_terminal "<command>" pid_var_name
+# Define a helper function that generates an AppleScript-escaped string (for use in osascript commands)
 escape_apple_script_string() {
   local value="$1"
   value="${value//\\/\\\\}"
@@ -23,11 +27,12 @@ escape_apple_script_string() {
   printf '%s' "$value"
 }
 
+# Define a helper function that opens each command in a new terminal window, with cross-platform support
 open_in_terminal() {
   local cmd="$1"
   local _pid_var="$2"
 
-  # macOS Terminal.app
+  # Support for the macOS Terminal.app
   if [ "$(uname)" = "Darwin" ]; then
     local escaped_cmd
     escaped_cmd="$(escape_apple_script_string "$cmd")"
@@ -40,14 +45,7 @@ OSA
     return 0
   fi
 
-  # Windows (Git Bash / MINGW): use cmd.exe start to open a new window running bash -lc
-  if command -v cmd.exe >/dev/null 2>&1 && [[ "$(uname -s)" =~ MINGW|MSYS|CYGWIN ]]; then
-    cmd.exe /C start "" bash -lc "$cmd"
-    eval "$_pid_var=''"
-    return 0
-  fi
-
-  # Common Linux terminal emulators
+  # Support for various Linux terminal emulators
   if command -v gnome-terminal >/dev/null 2>&1; then
     gnome-terminal -- bash -ic "$cmd; exec bash" >/dev/null 2>&1 &
     eval "$_pid_var=''"
@@ -64,39 +62,44 @@ OSA
     return 0
   fi
 
-  # Fallback: run in background in this shell and return the PID
+  # Fallback Operation: Run in background in this shell and return the PID
   bash -c "$cmd" &
-  eval "$_pid_var=$!"
+  eval "$_pid_var=$!"  # Set the PID variable to the background process ID
   return 0
 }
 
-PYTHON_BIN="$BACKEND/.venv/bin/python"
-if [ ! -f "$PYTHON_BIN" ] && [ -f "$BACKEND/.venv/Scripts/python.exe" ]; then
-  PYTHON_BIN="$BACKEND/.venv/Scripts/python.exe"
-fi
-
-BACKEND_CMD="cd '$BACKEND' ; echo 'FastAPI backend starting on http://localhost:8000' ; \"$PYTHON_BIN\" -m uvicorn app.main:app --reload --port 8000"
-FRONTEND_CMD="cd '$FRONTEND' ; echo 'Vite frontend starting on http://localhost:5173' ; npm run dev"
-
+# Create the Python virtual environment (if it doesn't exist) and install the backend dependencies
 if [ ! -f "$BACKEND/.venv/bin/python" ]; then
   echo "Creating Python virtual environment..."
   python -m venv "$BACKEND/.venv"
   "$BACKEND/.venv/bin/pip" install -e "$BACKEND" --quiet
 fi
 
-echo "Opening backend window..."
+# Set the path to the Python binary in the virtual environment
+if [ ! -v PYTHON_BIN ]; then
+  PYTHON_BIN="$BACKEND/.venv/bin/python"
+fi
+
+# Define the commands to start the backend and frontend servers
+BACKEND_CMD="cd '$BACKEND' ; \"$PYTHON_BIN\" -m uvicorn app.main:app --reload --port 8000"
+FRONTEND_CMD="cd '$FRONTEND' ; npm run dev"
+
+# Start the backend server in a new window and capture its PID (if possible)
+echo "Starting the backend..."
 open_in_terminal "$BACKEND_CMD" BACKEND_PID
 
-echo "Opening frontend window..."
+# Start the frontend server in a new window and capture its PID (if possible)
+echo "Starting the frontend..."
 open_in_terminal "$FRONTEND_CMD" FRONTEND_PID
 
+# Display instructions to the user
 if [ -n "$BACKEND_PID" ] || [ -n "$FRONTEND_PID" ]; then
-  echo ""; echo "Both servers are running:"; echo "  Backend:  http://localhost:8000  (API docs: /docs)"; echo "  Frontend: http://localhost:5173"; echo ""; echo "Press Ctrl+C to stop both."
+  echo ""; echo "Both servers are running."; echo "Press Ctrl+C to stop them..."
   trap "kill ${BACKEND_PID:-} ${FRONTEND_PID:-} 2>/dev/null; echo 'Servers stopped.'" EXIT INT TERM
   wait
 else
-  echo "Two terminal windows have been opened:";
-  echo "  Backend  (Python/uvicorn): http://localhost:8000";
-  echo "  Frontend (Vite):           http://localhost:5173";
-  echo "Close either window to stop that server.";
+  echo "Both servers are running in their respective terminals:";
+  echo -e "Backend (Python/Uvicorn): http://localhost:8000";
+  echo -e "Frontend (Vite) thttp://localhost:5173";
+  echo "Close either window to stop that server...";
 fi

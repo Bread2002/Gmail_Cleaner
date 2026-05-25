@@ -1,11 +1,9 @@
-"""
-Web OAuth 2.0 flow — replaces InstalledAppFlow from original main.py.
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Implements the authentication service using Google OAuth 2.0.
 
-Key difference from original: uses Flow (not InstalledAppFlow), redirects
-the user's browser to Google and back to the frontend callback page.
-The backend never opens a local port.
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import secrets
@@ -20,16 +18,12 @@ import google.auth.transport.requests
 from app.config import settings
 from app import store
 
+# Initialize logging for this module
 log = logging.getLogger("gmail_cleaner.auth")
 
 
+# Define a helper function to build the Google OAuth authorization URL and generate an OAuth flow
 def build_authorization_url() -> tuple[str, str]:
-    """
-    Create a new OAuth Flow, generate a state nonce, persist the Flow,
-    and return (authorization_url, state).
-
-    The caller returns auth_url to the frontend which redirects window.location.
-    """
     flow = Flow.from_client_config(
         settings.google_auth_config,
         scopes=settings.gmail_scopes,
@@ -39,26 +33,21 @@ def build_authorization_url() -> tuple[str, str]:
     state = secrets.token_urlsafe(32)
     log.info("Building OAuth authorization URL (state=%s…)", state[:8])
     auth_url, _ = flow.authorization_url(
-        access_type="offline",  # request refresh_token
+        access_type="offline",  # Request refresh_token
         include_granted_scopes="true",
-        prompt="consent",  # always show consent screen so refresh_token is returned
+        prompt="consent",  # Always show consent screen so refresh_token is returned
         state=state,
     )
 
-    # Store the Flow object keyed by state nonce (expires in 10 minutes)
+    # Store the Flow object keyed by state
     expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
     store.session.store_state(state, flow, expiry)
 
     return auth_url, state
 
 
+# Define a helper function to exchange an authorization code for tokens and return a Credentials object
 def exchange_code(code: str, state: str) -> Credentials:
-    """
-    Validate the state nonce, exchange the authorization code for tokens,
-    and return a google.oauth2.credentials.Credentials object.
-
-    Raises ValueError if state is invalid or expired.
-    """
     log.info("Exchanging OAuth code for tokens (state=%s…)", state[:8])
     flow: Flow | None = store.session.pop_state(state)
     if flow is None:
@@ -71,11 +60,8 @@ def exchange_code(code: str, state: str) -> Credentials:
     return flow.credentials
 
 
+# Define a helper function to refresh the access token if it has expired (returns updated credentials)
 def refresh_if_expired(credentials: Credentials) -> Credentials:
-    """
-    Refresh the access token if it has expired (or is about to).
-    Returns the (potentially updated) credentials.
-    """
     if credentials.expired and credentials.refresh_token:
         log.info("Access token expired — refreshing…")
         request = google.auth.transport.requests.Request()
@@ -84,10 +70,8 @@ def refresh_if_expired(credentials: Credentials) -> Credentials:
     return credentials
 
 
+# Define a helper function to fetch the authenticated user's email address using the credentials
 def get_user_email(credentials: Credentials) -> str:
-    """
-    Fetch the authenticated user's email address via the OAuth2 userinfo endpoint.
-    """
     import urllib.request
     import json
 

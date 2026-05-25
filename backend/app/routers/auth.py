@@ -1,12 +1,9 @@
-"""
-Auth router — /auth/*
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Defines API endpoints for authentication operations (login, callback, logout, and get current user) using Google OAuth and session management.
 
-GET  /auth/login     → returns Google OAuth URL
-POST /auth/callback  → exchanges code for tokens, creates session
-POST /auth/logout    → revokes token, destroys session
-GET  /auth/me        → returns current user email
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import uuid
@@ -14,32 +11,28 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
 
 from app.models.auth import LoginResponse, CallbackRequest, CallbackResponse, MeResponse
 from app.services import gmail_auth
 from app import store
 from app.dependencies import get_session_from_header
 
+# Define the API router for authentication-related endpoints with a prefix and tags for documentation
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# Define the GET endpoint to initiate the OAuth login flow by generating the Google authorization URL (no authentication required)
 @router.get("/login", response_model=LoginResponse)
 async def login() -> LoginResponse:
-    """
-    Step 1 of OAuth flow: build the Google authorization URL.
-    The frontend redirects window.location to this URL.
-    """
-    auth_url, _state = gmail_auth.build_authorization_url()
+    """Initiate the OAuth login flow by generating the Google authorization URL (no authentication required)."""
+    auth_url, _ = gmail_auth.build_authorization_url()
     return LoginResponse(auth_url=auth_url)
 
 
+# Define the POST endpoint to handle the OAuth callback from Google, exchange the authorization code for tokens, create a server-side session, and return session details (no authentication required)
 @router.post("/callback", response_model=CallbackResponse)
 async def callback(body: CallbackRequest) -> CallbackResponse:
-    """
-    Step 2 of OAuth flow: exchange authorization code for tokens.
-    Called by the frontend CallbackPage after Google redirects back.
-    """
+    """Handle the OAuth callback from Google, exchange the authorization code for tokens, create a server-side session, and return session details (no authentication required)."""
     try:
         credentials = gmail_auth.exchange_code(code=body.code, state=body.state)
     except ValueError as exc:
@@ -69,19 +62,13 @@ async def callback(body: CallbackRequest) -> CallbackResponse:
     )
 
 
+# Define the POST endpoint to log out the user by revoking the Google token and deleting the server-side session (requires a valid session token)
 @router.post("/logout", status_code=204)
 async def logout(
     session: Annotated[dict, Depends(get_session_from_header)],
-    authorization: str = "",
 ) -> None:
-    """Revoke the Google token and destroy the server-side session."""
-    from fastapi import Header
-
-    # We need the raw token to delete the session; extract from session dict
-    # (FastAPI injects session via Depends, so we can't easily get the token here;
-    #  we store it as a header for lookup)
-    # Simple approach: find by credentials object identity — not great for scale,
-    # but fine for local use. A proper fix would pass session_token through Depends.
+    """Log out the user by revoking the Google token and deleting the server-side session (requires a valid session token)."""
+    # Extract the token from the Authorization header (if present) for logging purposes
     credentials = session.get("credentials")
     if credentials and credentials.token:
         try:
@@ -105,7 +92,8 @@ async def logout(
         store.session.delete_session(token_to_delete)
 
 
+# Define the GET endpoint to return the authenticated user's email and authentication status (requires a valid session token)
 @router.get("/me", response_model=MeResponse)
 async def me(session: Annotated[dict, Depends(get_session_from_header)]) -> MeResponse:
-    """Return the authenticated user's email."""
+    """Return the authenticated user's email and authentication status (requires a valid session token)."""
     return MeResponse(email=session["user_email"], authenticated=True)

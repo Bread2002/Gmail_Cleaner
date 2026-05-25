@@ -1,18 +1,9 @@
-"""
-Senders router — /senders/*
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Defines API endpoints for managing flagged senders and related actions (preview, trash, block) with authentication via session tokens.
 
-IMPORTANT: bulk routes (/bulk/*) MUST be registered before parameterised routes
-(/{sender_id}/*) so FastAPI does not greedily match "bulk" as a sender_id.
-
-POST /senders/bulk/trash             → bulk start trash jobs
-POST /senders/bulk/block             → bulk create Gmail filters
-POST /senders/bulk/skip              → acknowledge client-side skip (no Gmail call)
-GET  /senders/{id}/preview           → first-message preview
-POST /senders/{id}/trash             → start batch-trash job
-GET  /senders/{id}/trash/{job_id}/stream  → SSE deletion progress
-POST /senders/{id}/block             → create Gmail filter
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
@@ -41,17 +32,19 @@ from app.dependencies import (
     get_session_from_header,
     get_session_from_query,
     get_gmail_service,
-    get_gmail_service_from_query,
 )
 from app.services import gmail_trash, gmail_filter
 from app import store
 
+# Define the API router for senders-related endpoints with a prefix and tags for documentation
 router = APIRouter(prefix="/senders", tags=["senders"])
+
+# Initialize logging for this module
 log = logging.getLogger("gmail_cleaner.routers.senders")
 
 
+# Define a helper function to look up a flagged sender by ID across all scan results in the session
 def _find_sender_in_scan(session: dict, sender_id: str) -> dict | None:
-    """Look up a flagged sender by ID across all scan results in the session."""
     for result in session.get("scan_results", {}).values():
         for sender in result.get("senders", []):
             if sender.get("id") == sender_id:
@@ -59,6 +52,7 @@ def _find_sender_in_scan(session: dict, sender_id: str) -> dict | None:
     return None
 
 
+# Define a helper function to retrieve the session token associated with a given session dictionary (used for logging and session management)
 def _get_session_token(session: dict) -> str:
     from app.store.session import _sessions
 
@@ -68,21 +62,13 @@ def _get_session_token(session: dict) -> str:
     return token
 
 
-# ---------------------------------------------------------------------------
-# Bulk routes — registered FIRST so /{sender_id}/* patterns don't shadow them
-# ---------------------------------------------------------------------------
-
-
+# Define the POST endpoint to start batch-trash jobs for multiple senders (requires authentication via session token)
 @router.post("/bulk/trash", response_model=BulkTrashResponse)
 async def bulk_trash(
     body: BulkTrashRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
 ) -> BulkTrashResponse:
-    """Start batch-trash jobs for multiple senders. Returns array of job IDs.
-
-    Each background task gets its own Gmail service instance so they don't
-    share the underlying httplib2 connection pool (which is not thread-safe).
-    """
+    """Start batch-trash jobs for multiple senders (requires authentication via session token)."""
     session_token = _get_session_token(session)
     credentials = session["credentials"]
     jobs = []
@@ -116,13 +102,14 @@ async def bulk_trash(
     return BulkTrashResponse(jobs=jobs)
 
 
+# Define the POST endpoint to start batch-block jobs for multiple senders (requires authentication via session token)
 @router.post("/bulk/block", response_model=BulkBlockResponse)
 async def bulk_block(
     body: BulkBlockRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
 ) -> BulkBlockResponse:
-    """Create Gmail filters to block multiple senders."""
+    """Start batch-block jobs for multiple senders (requires authentication via session token)."""
     blocked = []
     failed = []
 
@@ -142,16 +129,13 @@ async def bulk_block(
     return BulkBlockResponse(blocked=blocked, failed=failed)
 
 
+# Define the POST endpoint to acknowledge bulk-skip actions for multiple senders (requires authentication via session token)
 @router.post("/bulk/skip", response_model=BulkSkipResponse)
 async def bulk_skip(
     body: BulkSkipRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
 ) -> BulkSkipResponse:
-    """
-    Acknowledge a client-side bulk-skip. No Gmail API call is made.
-    Validates that each sender_id exists in the session and returns
-    the confirmed list so the frontend can dismiss them.
-    """
+    """Acknowledge bulk-skip actions for multiple senders (requires authentication via session token)."""
     skipped = []
     failed = []
 
@@ -164,18 +148,14 @@ async def bulk_skip(
     return BulkSkipResponse(skipped=skipped, failed=failed)
 
 
-# ---------------------------------------------------------------------------
-# Per-sender routes
-# ---------------------------------------------------------------------------
-
-
+# Define the GET endpoint to retrieve a preview of the sender's most recent message (requires authentication via session token)
 @router.get("/{sender_id}/preview", response_model=PreviewResponse)
 async def get_preview(
     sender_id: str,
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
 ) -> PreviewResponse:
-    """Return the subject, snippet, and date of the sender's first message."""
+    """Retrieve a preview of the sender's most recent message (requires authentication via session token)."""
     sender = _find_sender_in_scan(session, sender_id)
     if sender is None:
         raise HTTPException(status_code=404, detail="Sender not found")
@@ -241,6 +221,7 @@ async def get_preview(
     )
 
 
+# Define the POST endpoint to start a batch-trash job for all messages from a specific sender (requires authentication via session token)
 @router.post("/{sender_id}/trash", response_model=TrashStartResponse)
 async def start_trash(
     sender_id: str,
@@ -248,7 +229,7 @@ async def start_trash(
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
 ) -> TrashStartResponse:
-    """Start a background batch-trash job for all messages from this sender."""
+    """Start a batch-trash job for all messages from a specific sender (requires authentication via session token)."""
     sender = _find_sender_in_scan(session, sender_id)
     if sender is None:
         raise HTTPException(status_code=404, detail="Sender not found")
@@ -281,13 +262,14 @@ async def start_trash(
     )
 
 
+# Define the GET endpoint to retrieve a stream of progress updates for a batch-trash job (requires authentication via session token)
 @router.get("/{sender_id}/trash/{job_id}/stream")
 async def trash_stream(
     sender_id: str,
     job_id: str,
     session: Annotated[dict, Depends(get_session_from_query)],
 ) -> StreamingResponse:
-    """SSE stream of batch-deletion progress."""
+    """Stream progress updates for a batch-trash job via Server-Sent Events (SSE) (requires authentication via session token)."""
     session_token = _get_session_token(session)
     queue = store.session.get_queue(session_token, job_id)
     if queue is None:
@@ -329,13 +311,14 @@ async def trash_stream(
     )
 
 
+# Define the POST endpoint to create a Gmail filter to block future emails from a specific sender (requires authentication via session token)
 @router.post("/{sender_id}/block", response_model=BlockResponse)
 async def block_sender(
     sender_id: str,
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
 ) -> BlockResponse:
-    """Create a Gmail filter to permanently trash future emails from this sender."""
+    """Create a Gmail filter to block future emails from a specific sender (requires authentication via session token)."""
     sender = _find_sender_in_scan(session, sender_id)
     if sender is None:
         raise HTTPException(status_code=404, detail="Sender not found")

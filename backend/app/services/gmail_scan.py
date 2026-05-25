@@ -1,18 +1,9 @@
-"""
-Gmail scanning service — rewrites the per-message label check as a fast
-batch HTTP request so large inboxes don't time out.
+# Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+# Gmail Cleaner
+# Last Updated: May 24th, 2026
+# Description: Implements the email scanning logic using the batch API to efficiently identify senders with a high number of unread messages.
 
-Algorithm change vs original main.py:
-  OLD: fetch each message one-by-one to check UNREAD label → O(n) API calls
-       (100 messages × 300 ms = ~30 second hang)
-  NEW: use Gmail's batch HTTP API → 100 messages per round trip
-       then count total unread per sender — much faster and just as useful
-
-Threshold meaning change:
-  OLD: "20 *consecutive* unread from ALL messages"
-  NEW: "N *total* unread in the inbox" — catches newsletters you've never opened
-"""
-
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
@@ -23,15 +14,12 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
+# Initialize logging for this module
 log = logging.getLogger("gmail_cleaner.scan")
 
 
+# Define a helper function to execute Google API requests with exponential backoff on rate-limit errors (403/429)
 def _execute_with_backoff(request: Any, max_retries: int = 5) -> dict:
-    """
-    Execute a Google API request, retrying with exponential backoff on
-    rate-limit errors (403 rateLimitExceeded / 429 Too Many Requests).
-    Runs in a thread-pool executor — time.sleep() is safe here.
-    """
     for attempt in range(max_retries):
         try:
             return request.execute()
@@ -49,13 +37,8 @@ def _execute_with_backoff(request: Any, max_retries: int = 5) -> dict:
                 raise
 
 
-# ---------------------------------------------------------------------------
-# Pure-sync helpers (all run inside run_in_executor — never on the event loop)
-# ---------------------------------------------------------------------------
-
-
+# Define a helper function to extract the email address from a "From" header string (handles formats like "Display Name <user@host.com>")
 def _extract_email(from_header: str) -> str:
-    """'Display Name <user@host.com>' → 'user@host.com'"""
     s = from_header.find("<")
     e = from_header.find(">")
     if s != -1 and e != -1:
@@ -63,6 +46,7 @@ def _extract_email(from_header: str) -> str:
     return from_header.strip().lower()
 
 
+# Define a helper function to extract the display name from a "From" header string (returns None if no display name is present)
 def _extract_display_name(from_header: str) -> str | None:
     lt = from_header.find("<")
     if lt > 0:
@@ -70,12 +54,8 @@ def _extract_display_name(from_header: str) -> str | None:
     return None
 
 
+# Define a helper function to perform a batch request for message metadata (From, Subject, Date) for a list of message IDs
 def _batch_get_headers(service: Any, message_ids: list[str]) -> dict[str, dict]:
-    """
-    Single batch HTTP request for up to 100 message metadata items.
-    Returns {msg_id: {from, subject, date, snippet}} for successful responses.
-    Gmail batch API docs: developers.google.com/gmail/api/guides/batch
-    """
     results: dict[str, dict] = {}
     errors: list[tuple] = []
 
@@ -116,27 +96,17 @@ def _batch_get_headers(service: Any, message_ids: list[str]) -> dict[str, dict]:
     return results
 
 
-# ---------------------------------------------------------------------------
-# Main async scan task
-# ---------------------------------------------------------------------------
-
-
+# Define the main scanning function that will be run as a background task.
+# It lists unread messages, identifies senders with a high number of unread messages, and emits progress events to the provided queue.
 async def run_scan(
     service: Any,
     queue: asyncio.Queue,
     scan_id: str,
     dry_run: bool,
-    consecutive_unread_threshold: int,  # now used as "total unread" threshold
+    consecutive_unread_threshold: int,
     max_senders: int,
-    max_messages_per_sender: int,  # unused in new algorithm, kept for API compat
     store_result_fn: Any,
 ) -> None:
-    """
-    Background task — scans for flagged senders using the batch API and emits
-    SSE progress events to `queue`.
-
-    The threshold parameter now means "total unread messages from this sender".
-    """
     loop = asyncio.get_running_loop()
     senders_found: list[dict] = []
 
@@ -148,18 +118,16 @@ async def run_scan(
         max_senders,
     )
 
+    # Define a helper function to run a blocking API call in the default executor and return the result (to avoid blocking the event loop)
     async def api(fn: Any) -> Any:
-        """Run a blocking Gmail API call in the thread pool."""
         return await loop.run_in_executor(None, fn)
 
+    # Define a helper function to emit progress events to the queue
     async def emit(event_type: str, data: dict) -> None:
-        log.debug("[SSE→%s] %s", event_type, str(data)[:160])
         await queue.put({"type": event_type, "data": data})
 
     try:
-        # ── Step 1: list ALL unread message IDs (one page at a time) ────────
-        # Paginating in async context lets us emit a progress event per page,
-        # giving immediate SSE feedback even before the listing is done.
+        # List all unread message IDs (one page at a time)
         log.info("Scan %s: listing unread messages…", scan_id)
         await emit(
             "progress",
@@ -181,7 +149,7 @@ async def run_scan(
                 len(unread_messages),
             )
 
-            pt = page_token  # capture current value for lambda
+            pt = page_token  # Capture current value for lambda
             result: dict = await api(
                 lambda _pt=pt: service.users()
                 .messages()
@@ -223,9 +191,9 @@ async def run_scan(
                 break
 
             if not page_token:
-                break  # emit the final count below
+                break  # Emit the final count below
 
-            # Intermediate page — let the user see we're still listing
+            # Let the user see we're still listing
             await emit(
                 "progress",
                 {
@@ -248,8 +216,7 @@ async def run_scan(
         if total_unread == 0:
             log.info("Scan %s: inbox is genuinely empty — nothing to scan", scan_id)
 
-        # ── Step 2: batch-fetch From headers (100 messages per HTTP call) ────
-        # Build a map: sender_email → {info dict}
+        # Batch-fetch from headers (100 messages per HTTP call) and count unread messages per sender
         sender_map: dict[str, dict] = {}
         batch_size = 100
 
@@ -304,7 +271,7 @@ async def run_scan(
             len(sender_map),
         )
 
-        # ── Step 3: flag senders above threshold ─────────────────────────────
+        # Flag senders above threshold (one API call per sender, but we stop once we reach max_senders)
         await emit(
             "progress",
             {
@@ -363,7 +330,7 @@ async def run_scan(
                 "email": sender_email,
                 "display_name": info["display_name"],
                 "message_count": total_estimate,
-                "consecutive_unread_count": unread_count,  # re-used field = total unread
+                "consecutive_unread_count": unread_count,
                 "snippet": info["snippet"],
                 "subject": info["subject"],
                 "first_message_date": info["date"] or None,
@@ -371,8 +338,7 @@ async def run_scan(
             senders_found.append(sender_record)
             await emit("sender_found", sender_record)
 
-            # Write running state so preview/trash endpoints can find this
-            # sender immediately — before the scan finishes.
+            # Write running state so preview/trash endpoints can find this sender (if the user acts before the scan completes)
             store_result_fn(
                 {
                     "scan_id": scan_id,
@@ -382,7 +348,7 @@ async def run_scan(
                 }
             )
 
-        # ── Done ─────────────────────────────────────────────────────────────
+        # Scan complete
         log.info("Scan %s complete: %d sender(s) flagged", scan_id, len(senders_found))
         store_result_fn(
             {
@@ -419,4 +385,4 @@ async def run_scan(
         await emit("error", {"detail": detail})
 
     finally:
-        await queue.put(None)  # sentinel — closes the SSE stream
+        await queue.put(None)  # Closes the SSE stream
