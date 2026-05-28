@@ -1,10 +1,18 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: React component for the header of the Gmail Cleaner application.
+
+// Import necessary modules and components
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 
+// Define the Header component that displays the application logo, name, user email, and navigation links
 export function Header() {
   const { userEmail, logout } = useAuth();
   const navigate = useNavigate();
 
+  // Handler function for logging out the user and navigating to the login page
   const handleLogout = async () => {
     await logout();
     navigate("/login");

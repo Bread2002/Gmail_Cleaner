@@ -1,5 +1,13 @@
-import { useSettings } from '../hooks/useSettings';
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: The main entry point for the settings page.
+//              Users can customize how the scanning process identifies senders for cleanup, such as adjusting thresholds and toggling dry run mode.
 
+// Import necessary modules and components
+import { useSettings } from "../hooks/useSettings";
+
+// Define the SettingsPage component that renders the settings interface for the Gmail Cleaner application
 export function SettingsPage() {
   const { settings, update, loading, error } = useSettings();
 
@@ -15,7 +23,9 @@ export function SettingsPage() {
     <div className="max-w-lg mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-500 text-sm mt-1">Customize how Gmail Cleaner scans your inbox</p>
+        <p className="text-gray-500 text-sm mt-1">
+          Customize how Gmail Cleaner scans your inbox
+        </p>
       </div>
 
       {error && (
@@ -29,8 +39,12 @@ export function SettingsPage() {
         <div className="p-5 space-y-3">
           <div className="flex justify-between items-center">
             <div>
-              <p className="font-medium text-gray-800">Consecutive Unread Threshold</p>
-              <p className="text-xs text-gray-500">Flag senders who have this many unread in a row</p>
+              <p className="font-medium text-gray-800">
+                Consecutive Unread Threshold
+              </p>
+              <p className="text-xs text-gray-500">
+                Flag senders who have this many unread in a row
+              </p>
             </div>
             <span className="text-lg font-bold text-blue-600 w-10 text-right">
               {settings.consecutive_unread_threshold}
@@ -42,7 +56,9 @@ export function SettingsPage() {
             max={100}
             step={5}
             value={settings.consecutive_unread_threshold}
-            onChange={(e) => update({ consecutive_unread_threshold: Number(e.target.value) })}
+            onChange={(e) =>
+              update({ consecutive_unread_threshold: Number(e.target.value) })
+            }
             className="w-full accent-blue-600"
           />
           <div className="flex justify-between text-xs text-gray-400">
@@ -56,7 +72,9 @@ export function SettingsPage() {
           <div className="flex justify-between items-center">
             <div>
               <p className="font-medium text-gray-800">Max Senders per Scan</p>
-              <p className="text-xs text-gray-500">Stop after finding this many flagged senders</p>
+              <p className="text-xs text-gray-500">
+                Stop after finding this many flagged senders
+              </p>
             </div>
             <span className="text-lg font-bold text-blue-600 w-10 text-right">
               {settings.max_senders}
@@ -81,9 +99,12 @@ export function SettingsPage() {
         <div className="p-5 space-y-3">
           <div className="flex justify-between items-center">
             <div>
-              <p className="font-medium text-gray-800">Messages Inspected per Sender</p>
+              <p className="font-medium text-gray-800">
+                Messages Inspected per Sender
+              </p>
               <p className="text-xs text-gray-500">
-                How many of each sender's messages to check for consecutive unread
+                How many of each sender's messages to check for consecutive
+                unread
               </p>
             </div>
             <span className="text-lg font-bold text-blue-600 w-12 text-right">
@@ -96,7 +117,9 @@ export function SettingsPage() {
             max={500}
             step={20}
             value={settings.max_messages_per_sender}
-            onChange={(e) => update({ max_messages_per_sender: Number(e.target.value) })}
+            onChange={(e) =>
+              update({ max_messages_per_sender: Number(e.target.value) })
+            }
             className="w-full accent-blue-600"
           />
           <div className="flex justify-between text-xs text-gray-400">
@@ -113,30 +136,38 @@ export function SettingsPage() {
                 id="dry-run-toggle"
                 type="checkbox"
                 checked={settings.dry_run_by_default}
-                onChange={(e) => update({ dry_run_by_default: e.target.checked })}
+                onChange={(e) =>
+                  update({ dry_run_by_default: e.target.checked })
+                }
                 className="sr-only"
               />
               <label
                 htmlFor="dry-run-toggle"
                 className={`block w-10 h-6 rounded-full transition-colors cursor-pointer ${
-                  settings.dry_run_by_default ? 'bg-amber-400' : 'bg-gray-200'
+                  settings.dry_run_by_default ? "bg-amber-400" : "bg-gray-200"
                 }`}
               >
-                <div className={`w-4 h-4 bg-white rounded-full shadow absolute top-1 transition-transform ${
-                  settings.dry_run_by_default ? 'translate-x-5' : 'translate-x-1'
-                }`} />
+                <div
+                  className={`w-4 h-4 bg-white rounded-full shadow absolute top-1 transition-transform ${
+                    settings.dry_run_by_default
+                      ? "translate-x-5"
+                      : "translate-x-1"
+                  }`}
+                />
               </label>
             </div>
             <div>
               <p className="font-medium text-gray-800">
                 Dry Run Mode
                 {settings.dry_run_by_default && (
-                  <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">ON</span>
+                  <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                    ON
+                  </span>
                 )}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
-                When enabled, scans show what <em>would</em> be deleted without actually making changes.
-                Great for previewing before committing.
+                When enabled, scans show what <em>would</em> be deleted without
+                actually making changes. Great for previewing before committing.
               </p>
             </div>
           </div>

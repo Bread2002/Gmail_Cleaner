@@ -1,11 +1,19 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Contains the useDeletion hook for managing the state and actions related to bulk deletion of emails in the Gmail Cleaner application.
+
+// Import necessary modules and components
 import { useState, useCallback, useRef } from "react";
 import { sendersApi } from "../api/senders";
 import { sseUrl } from "../api/client";
 import { createSSE } from "../utils/sse";
 import type { TrashProgressEvent, TrashCompleteEvent } from "../types";
 
+// Define the possible phases of the deletion process and the structure of the deletion state
 export type DeletionPhase = "idle" | "starting" | "deleting" | "done" | "error";
 
+// Define the structure of the deletion state
 interface DeletionState {
   phase: DeletionPhase;
   jobId: string | null;
@@ -14,6 +22,7 @@ interface DeletionState {
   error: string | null;
 }
 
+// Define the initial state for the deletion process
 const INITIAL: DeletionState = {
   phase: "idle",
   jobId: null,
@@ -22,6 +31,7 @@ const INITIAL: DeletionState = {
   error: null,
 };
 
+// Define the useDeletion hook that manages the state and actions related to bulk deletion of emails for a specific sender
 export function useDeletion(senderId: string) {
   const [state, setState] = useState<DeletionState>(INITIAL);
   const sseRef = useRef<{ close: () => void } | null>(null);

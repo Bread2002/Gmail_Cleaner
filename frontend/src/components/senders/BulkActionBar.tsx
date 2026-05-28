@@ -1,6 +1,13 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Bulk action bar for managing multiple senders at once, including bulk trashing, blocking, and skipping.
+
+// Import necessary modules and components
 import { useState } from "react";
 import { sendersApi } from "../../api/senders";
 
+// Define the props for the BulkActionBar component
 interface Props {
   selectedIds: string[];
   totalCount: number;
@@ -22,6 +29,7 @@ interface Props {
   onBulkTrashStarted: (jobs: { sender_id: string; job_id: string }[]) => void;
 }
 
+// Define the BulkActionBar component that renders bulk action buttons for managing multiple senders
 export function BulkActionBar({
   selectedIds,
   totalCount,
@@ -39,7 +47,8 @@ export function BulkActionBar({
 
   // Only operate on senders that haven't been trashed yet.
   const trashableIds = selectedIds.filter((id) => !trashedIds.has(id));
-  const allSelectedTrashed = selectedIds.length > 0 && trashableIds.length === 0;
+  const allSelectedTrashed =
+    selectedIds.length > 0 && trashableIds.length === 0;
 
   const handleBulkTrash = async () => {
     // Only trash senders that haven't been deleted yet; skip already-trashed ones.
@@ -132,7 +141,11 @@ export function BulkActionBar({
         <button
           onClick={handleBulkTrash}
           disabled={selectedIds.length === 0 || loading || allSelectedTrashed}
-          title={allSelectedTrashed ? "All selected senders have already been trashed" : undefined}
+          title={
+            allSelectedTrashed
+              ? "All selected senders have already been trashed"
+              : undefined
+          }
           className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors
             ${
               dryRun

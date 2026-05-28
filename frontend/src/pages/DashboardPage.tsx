@@ -1,3 +1,10 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: The main entry point for the dashboard page.
+//              Users can initiate scans of their Gmail inbox, view progress, and see results.
+
+// Import necessary modules and components
 import { useScan } from "../hooks/useScan";
 import { useSettings } from "../hooks/useSettings";
 import { ScanButton } from "../components/scan/ScanButton";
@@ -5,6 +12,7 @@ import { ScanProgress } from "../components/scan/ScanProgress";
 import { ScanSummary } from "../components/scan/ScanSummary";
 import { SenderList } from "../components/senders/SenderList";
 
+// Define the DashboardPage component that renders the main dashboard interface for the Gmail Cleaner application
 export function DashboardPage() {
   const { settings } = useSettings();
   const scan = useScan();

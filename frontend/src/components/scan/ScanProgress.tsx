@@ -1,7 +1,13 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: React component for displaying the progress of the email scanning process in the Gmail Cleaner application.
+
+// Import necessary modules and types
 import type { ScanPhase } from "../../hooks/useScan";
 import type { ScanProgressEvent } from "../../types";
-import { fmtNumber } from "../../utils/formatters";
 
+// Define the Props interface for the ScanProgress component
 interface Props {
   phase: ScanPhase;
   progress: ScanProgressEvent | null;
@@ -9,6 +15,7 @@ interface Props {
   eventLog: string[];
 }
 
+// Define the ScanProgress component that displays the progress of the email scanning process
 export function ScanProgress({
   phase,
   progress,

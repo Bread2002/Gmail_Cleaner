@@ -1,7 +1,15 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: The main entry point for the login page.
+//              Users can sign in with their Google account to start using the Gmail Cleaner application.
+
+// Import necessary modules and components
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
+// Define the LoginPage component that renders the login interface for the Gmail Cleaner application
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();

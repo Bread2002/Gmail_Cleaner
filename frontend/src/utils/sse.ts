@@ -1,9 +1,7 @@
-/**
- * Typed EventSource wrapper with automatic cleanup.
- *
- * EventSource auto-reconnects by default when the connection drops — we stop
- * that by closing it explicitly on terminal events (done, complete, error).
- */
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Contains utility functions for managing server-sent events (SSE) in the Gmail Cleaner frontend application.
 
 export interface SSEHandlers<T = unknown> {
   onMessage: (type: string, data: T) => void;
@@ -30,7 +28,7 @@ export function createSSE<T = unknown>(
   };
 
   // Named events the backend emits
-  const namedEvents = ['progress', 'sender_found', 'complete', 'error', 'done'];
+  const namedEvents = ["progress", "sender_found", "complete", "error", "done"];
 
   for (const type of namedEvents) {
     es.addEventListener(type, (evt: Event) => {
@@ -41,14 +39,14 @@ export function createSSE<T = unknown>(
         data = {} as T;
       }
 
-      if (type === 'done') {
+      if (type === "done") {
         // "done" is the sentinel the backend sends after scan/trash completes
         handlers.onDone?.();
         close();
         return;
       }
 
-      if (type === 'complete') {
+      if (type === "complete") {
         // Backend emits "complete" inside the task, then "done" from the generator
         // We handle both — call onMessage first so the hook can log it, then close
         handlers.onMessage(type, data);
@@ -57,7 +55,7 @@ export function createSSE<T = unknown>(
         return;
       }
 
-      if (type === 'error') {
+      if (type === "error") {
         // Terminal error from the backend task — notify and close so we don't reconnect
         handlers.onMessage(type, data);
         close();
@@ -69,9 +67,9 @@ export function createSSE<T = unknown>(
   }
 
   es.onerror = (err) => {
-    if (closedIntentionally) return;   // ignore errors from our own close()
+    if (closedIntentionally) return; // ignore errors from our own close()
     handlers.onError?.(err);
-    close();  // stop auto-reconnect on unexpected drops
+    close(); // stop auto-reconnect on unexpected drops
   };
 
   return { close };

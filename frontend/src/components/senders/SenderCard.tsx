@@ -1,3 +1,9 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Sender card component that displays sender information, preview, and action buttons for managing individual senders.
+
+// Import necessary modules and components
 import { useState, useEffect, useRef } from "react";
 import type { FlaggedSender } from "../../types";
 import { useDeletion } from "../../hooks/useDeletion";
@@ -5,6 +11,7 @@ import { SenderPreview } from "./SenderPreview";
 import { ActionButtons } from "./ActionButtons";
 import { DeletionProgress } from "../deletion/DeletionProgress";
 
+// Define the props for the SenderCard component
 interface Props {
   sender: FlaggedSender;
   dryRun: boolean;
@@ -38,6 +45,7 @@ interface Props {
   onBulkTrashJobDone?: (id: string) => void;
 }
 
+// Define the SenderCard component that renders sender information, preview, and action buttons for managing individual senders
 export function SenderCard({
   sender,
   dryRun,

@@ -1,3 +1,9 @@
+/* Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+   Gmail Cleaner
+   Last Updated: May 26th, 2026
+   Description: Configures component-specific styles for the Gmail Cleaner frontend application. */
+
+/* Styles for the counter class */
 .counter {
   font-size: 16px;
   padding: 5px 10px;
@@ -8,6 +14,7 @@
   transition: border-color 0.3s;
   margin-bottom: 24px;
 
+  /* Control hover and focus states */
   &:hover {
     border-color: var(--accent-border);
   }
@@ -17,6 +24,7 @@
   }
 }
 
+/* Styles for the hero class */
 .hero {
   position: relative;
 
@@ -56,6 +64,7 @@
   }
 }
 
+/* Styles for the center element */
 #center {
   display: flex;
   flex-direction: column;
@@ -70,6 +79,7 @@
   }
 }
 
+/* Styles for the next-steps element */
 #next-steps {
   display: flex;
   border-top: 1px solid var(--border);
@@ -95,6 +105,7 @@
   }
 }
 
+/* Styles for the docs element */
 #docs {
   border-right: 1px solid var(--border);
 
@@ -104,6 +115,7 @@
   }
 }
 
+/* Styles for the next-steps element (unordered lists) */
 #next-steps ul {
   list-style: none;
   padding: 0;
@@ -153,6 +165,7 @@
   }
 }
 
+/* Styles for the spacer element */
 #spacer {
   height: 88px;
   border-top: 1px solid var(--border);
@@ -161,6 +174,7 @@
   }
 }
 
+/* Styles for the ticks class */
 .ticks {
   position: relative;
   width: 100%;

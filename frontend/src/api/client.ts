@@ -1,7 +1,15 @@
-import axios from "axios";
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 26th, 2026
+// Description: API module for client configuration and utilities in the Gmail Cleaner frontend application.
 
+// Import necessary modules and components
+import axios from "axios"; // Axios is used for making HTTP requests to the backend API
+
+// Define the base URL for the API (defaults to "/api" for relative paths)
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
+// Create an Axios instance with the base URL and default headers
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
@@ -29,14 +37,7 @@ apiClient.interceptors.response.use(
   },
 );
 
-/**
- * Build an SSE URL with the session token as a query param.
- *
- * SSE connects DIRECTLY to the backend (not through the Vite dev proxy) because
- * http-proxy buffers responses and EventSource events stop arriving in real time.
- * VITE_SSE_BASE_URL defaults to http://localhost:8000 for local dev.
- * CORS is already configured on the backend to allow the frontend origin.
- */
+// Define a helper function to construct Server-Sent Events (SSE) URLs with the session token
 export function sseUrl(path: string): string {
   const token = localStorage.getItem("session_token") ?? "";
   // Prefer explicit SSE base, then fall back to API base, then direct backend

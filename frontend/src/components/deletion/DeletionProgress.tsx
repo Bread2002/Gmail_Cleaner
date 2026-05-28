@@ -1,7 +1,14 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: React component for displaying the progress of email deletion in the Gmail Cleaner application.
+
+// Import necessary modules and types
 import type { DeletionPhase } from "../../hooks/useDeletion";
 import type { TrashProgressEvent, TrashCompleteEvent } from "../../types";
 import { fmtNumber } from "../../utils/formatters";
 
+// Define the Props interface for the DeletionProgress component
 interface Props {
   phase: DeletionPhase;
   progress: TrashProgressEvent | null;
@@ -9,6 +16,7 @@ interface Props {
   dryRun: boolean;
 }
 
+// Define the DeletionProgress component that displays the progress of email deletion based on the current phase and progress data
 export function DeletionProgress({ phase, progress, result, dryRun }: Props) {
   if (phase === "idle") return null;
 

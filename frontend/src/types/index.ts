@@ -1,7 +1,10 @@
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Defines TypeScript types and interfaces used throughout the Gmail Cleaner frontend application.
+//              Including API request/response shapes, state structures for hooks, and event types for server-sent events (SSE).
 
+// Define types related to authentication and user information
 export interface LoginResponse {
   auth_url: string;
 }
@@ -22,10 +25,7 @@ export interface MeResponse {
   authenticated: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Senders / Scan
-// ---------------------------------------------------------------------------
-
+// Define types related to scanning and sender information
 export type ScanStatus = "pending" | "running" | "complete" | "error";
 
 export interface FlaggedSender {
@@ -96,10 +96,7 @@ export interface BulkSkipResponse {
   failed: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
+// Define types related to user settings
 export interface UserSettings {
   consecutive_unread_threshold: number;
   max_senders: number;
@@ -107,10 +104,7 @@ export interface UserSettings {
   dry_run_by_default: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// SSE Events
-// ---------------------------------------------------------------------------
-
+// Define types for server-sent events (SSE) related to scanning and deletion processes
 export type ScanEventType =
   | "progress"
   | "sender_found"

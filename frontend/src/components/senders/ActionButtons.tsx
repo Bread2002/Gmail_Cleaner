@@ -1,7 +1,14 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Action buttons for sender management, including trashing emails and blocking senders.
+
+// Import necessary modules and components
 import { useState } from "react";
 import { sendersApi } from "../../api/senders";
 import type { DeletionPhase } from "../../hooks/useDeletion";
 
+// Define the props for the ActionButtons component
 interface Props {
   senderId: string;
   phase: DeletionPhase;
@@ -12,6 +19,7 @@ interface Props {
   onBlockComplete: () => void;
 }
 
+// Define the ActionButtons component that renders action buttons for managing senders
 export function ActionButtons({
   senderId,
   phase,

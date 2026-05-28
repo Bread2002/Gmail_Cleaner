@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
-import { sendersApi } from '../../api/senders';
-import type { PreviewResponse } from '../../types';
-import { truncate, fmtDate } from '../../utils/formatters';
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Sender preview component that fetches and displays a preview of the sender's emails, including subject, snippet, and received date.
+
+// Import necessary modules and components
+import { useState, useEffect } from "react";
+import { sendersApi } from "../../api/senders";
+import type { PreviewResponse } from "../../types";
+import { truncate, fmtDate } from "../../utils/formatters";
 
 interface Props {
   senderId: string;
@@ -9,13 +15,18 @@ interface Props {
   initialSubject?: string;
 }
 
-export function SenderPreview({ senderId, initialSnippet, initialSubject }: Props) {
+export function SenderPreview({
+  senderId,
+  initialSnippet,
+  initialSubject,
+}: Props) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    sendersApi.preview(senderId)
+    sendersApi
+      .preview(senderId)
       .then(setPreview)
       .catch(() => setPreview(null))
       .finally(() => setLoading(false));
@@ -29,15 +40,17 @@ export function SenderPreview({ senderId, initialSnippet, initialSubject }: Prop
     );
   }
 
-  const subject = preview?.subject ?? initialSubject ?? '(no subject)';
-  const snippet = preview?.snippet ?? initialSnippet ?? '';
+  const subject = preview?.subject ?? initialSubject ?? "(no subject)";
+  const snippet = preview?.snippet ?? initialSnippet ?? "";
 
   return (
     <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-100">
       <p className="font-medium text-gray-700 mb-1">{subject}</p>
       <p className="text-gray-500 italic">{truncate(snippet, 200)}</p>
       {preview?.date && (
-        <p className="text-xs text-gray-400 mt-1">Received {fmtDate(preview.date)}</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Received {fmtDate(preview.date)}
+        </p>
       )}
     </div>
   );

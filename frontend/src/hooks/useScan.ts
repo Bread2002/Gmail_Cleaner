@@ -1,11 +1,19 @@
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Contains the useScan hook for managing the state and actions related to scanning emails for potential deletion in the Gmail Cleaner application.
+
+// Import necessary modules and components
 import { useState, useCallback, useRef } from "react";
 import { scanApi } from "../api/scan";
 import { sseUrl } from "../api/client";
 import { createSSE } from "../utils/sse";
 import type { FlaggedSender, ScanProgressEvent } from "../types";
 
+// Define the possible phases of the scanning process and the structure of the scanning state
 export type ScanPhase = "idle" | "starting" | "scanning" | "done" | "error";
 
+// Define the structure of the scanning state
 interface ScanState {
   phase: ScanPhase;
   scanId: string | null;
@@ -17,6 +25,7 @@ interface ScanState {
   eventLog: string[];
 }
 
+// Define the initial state for the scanning process
 const INITIAL: ScanState = {
   phase: "idle",
   scanId: null,
@@ -27,11 +36,13 @@ const INITIAL: ScanState = {
   eventLog: [],
 };
 
+// Helper function to generate a timestamp string for log messages
 function timestamp(): string {
   const d = new Date();
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
 }
 
+// Define the useScan hook that manages the state and actions related to scanning emails for potential deletion
 export function useScan() {
   const [state, setState] = useState<ScanState>(INITIAL);
   const sseRef = useRef<{ close: () => void } | null>(null);

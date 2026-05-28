@@ -1,5 +1,12 @@
+/* Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+   Gmail Cleaner
+   Last Updated: May 26th, 2026
+   Description: Configures global styles for the Gmail Cleaner frontend application. */
+
+/* Import necessary libraries */
 @import "tailwindcss";
 
+/* Styles for the root state */
 :root {
   color-scheme: light dark;
   font-synthesis: none;
@@ -7,11 +14,13 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Base styles for the body tag */
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Styles for the root element */
 #root {
   min-height: 100vh;
 }

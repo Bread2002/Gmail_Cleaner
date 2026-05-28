@@ -1,18 +1,27 @@
-import { useState, useCallback, useMemo } from 'react';
-import type { FlaggedSender } from '../../types';
-import { SenderCard } from './SenderCard';
-import { BulkActionBar } from './BulkActionBar';
+// Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
+// Gmail Cleaner
+// Last Updated: May 28th, 2026
+// Description: Sender list component that renders a list of senders with bulk action capabilities, including selection, and bulk trashing.
 
+// Import necessary modules and components
+import { useState, useCallback, useMemo } from "react";
+import type { FlaggedSender } from "../../types";
+import { SenderCard } from "./SenderCard";
+import { BulkActionBar } from "./BulkActionBar";
+
+// Define the props for the SenderList component
 interface Props {
   senders: FlaggedSender[];
   dryRun: boolean;
 }
 
+// Define the SenderList component that renders a list of senders
 interface BulkTrashJob {
   sender_id: string;
   job_id: string;
 }
 
+// Define the SenderList component that renders a list of senders with bulk action capabilities, including selection, and bulk trashing
 export function SenderList({ senders, dryRun }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Tracks senders removed from the visible list (skipped, blocked, or bulk-trash done).
@@ -116,7 +125,8 @@ export function SenderList({ senders, dryRun }: Props) {
     });
   };
 
-  const selectAll = () => setSelectedIds(new Set(visibleSenders.map((s) => s.id)));
+  const selectAll = () =>
+    setSelectedIds(new Set(visibleSenders.map((s) => s.id)));
   const deselectAll = () => setSelectedIds(new Set());
 
   if (senders.length === 0) return null;
