@@ -1,9 +1,10 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
 # Last Updated: May 28th, 2026
-# Description: Redis-backed session store for the Gmail Cleaner backend.
-#              Durable session data (credentials, settings) lives in Redis.
-#              Process-local data (queues, scan results) stays in-memory.
+# Description: Session store for the Gmail Cleaner backend.
+#              When USE_REDIS=true (default), durable session data lives in Redis.
+#              When USE_REDIS=false, a simple in-memory dict is used instead (local dev only).
+#              Process-local data (queues, scan results) always stays in-memory regardless.
 
 from __future__ import annotations
 
@@ -24,8 +25,12 @@ log = logging.getLogger("gmail_cleaner.session")
 # These cannot be serialized to Redis and are only needed within a single process.
 _volatile: dict[str, dict[str, Any]] = {}
 
-# Redis client (initialized lazily via _get_redis)
+# Redis client (initialized lazily via _get_redis, only used when settings.use_redis is True)
 _redis: aioredis.Redis | None = None
+
+# In-memory fallback storage (used when settings.use_redis is False)
+_mem_sessions: dict[str, dict[str, Any]] = {}
+_mem_states: dict[str, dict[str, Any]] = {}
 
 
 def _get_redis() -> aioredis.Redis:
@@ -58,15 +63,23 @@ async def create_session(
         },
     }
     _volatile[session_token] = {"scan_results": {}, "queues": {}}
-    await _get_redis().set(
-        _session_key(session_token),
-        json.dumps(data),
-        ex=settings.session_ttl_seconds,
-    )
+    if settings.use_redis:
+        await _get_redis().set(
+            _session_key(session_token),
+            json.dumps(data),
+            ex=settings.session_ttl_seconds,
+        )
+    else:
+        _mem_sessions[session_token] = data
 
 
 async def get_session(session_token: str) -> dict[str, Any] | None:
-    raw = await _get_redis().get(_session_key(session_token))
+    if settings.use_redis:
+        raw = await _get_redis().get(_session_key(session_token))
+    else:
+        entry = _mem_sessions.get(session_token)
+        raw = json.dumps(entry) if entry is not None else None
+
     if raw is None:
         return None
 
@@ -90,36 +103,57 @@ async def get_session(session_token: str) -> dict[str, Any] | None:
 
 
 async def delete_session(session_token: str) -> None:
-    await _get_redis().delete(_session_key(session_token))
+    if settings.use_redis:
+        await _get_redis().delete(_session_key(session_token))
+    else:
+        _mem_sessions.pop(session_token, None)
     _volatile.pop(session_token, None)
 
 
 async def update_credentials(session_token: str, credentials: Credentials) -> None:
-    key = _session_key(session_token)
-    raw = await _get_redis().get(key)
-    if raw is None:
-        return
-    data = json.loads(raw)
-    data["credentials_json"] = credentials.to_json()
-    await _get_redis().set(key, json.dumps(data), keepttl=True)
+    if settings.use_redis:
+        key = _session_key(session_token)
+        raw = await _get_redis().get(key)
+        if raw is None:
+            return
+        data = json.loads(raw)
+        data["credentials_json"] = credentials.to_json()
+        await _get_redis().set(key, json.dumps(data), keepttl=True)
+    else:
+        if session_token not in _mem_sessions:
+            return
+        _mem_sessions[session_token]["credentials_json"] = credentials.to_json()
 
 
 async def get_settings(session_token: str) -> dict[str, Any]:
-    raw = await _get_redis().get(_session_key(session_token))
-    if raw is None:
-        return {}
-    return json.loads(raw)["settings"].copy()
+    if settings.use_redis:
+        raw = await _get_redis().get(_session_key(session_token))
+        if raw is None:
+            return {}
+        return json.loads(raw)["settings"].copy()
+    else:
+        entry = _mem_sessions.get(session_token)
+        if entry is None:
+            return {}
+        return entry["settings"].copy()
 
 
 async def update_settings(session_token: str, patch: dict[str, Any]) -> dict[str, Any]:
-    key = _session_key(session_token)
-    raw = await _get_redis().get(key)
-    if raw is None:
-        return {}
-    data = json.loads(raw)
-    data["settings"].update(patch)
-    await _get_redis().set(key, json.dumps(data), keepttl=True)
-    return data["settings"].copy()
+    if settings.use_redis:
+        key = _session_key(session_token)
+        raw = await _get_redis().get(key)
+        if raw is None:
+            return {}
+        data = json.loads(raw)
+        data["settings"].update(patch)
+        await _get_redis().set(key, json.dumps(data), keepttl=True)
+        return data["settings"].copy()
+    else:
+        entry = _mem_sessions.get(session_token)
+        if entry is None:
+            return {}
+        entry["settings"].update(patch)
+        return entry["settings"].copy()
 
 
 # Scan results — in-memory (process-local, ephemeral)
@@ -156,7 +190,7 @@ def delete_queue(session_token: str, queue_id: str) -> None:
         volatile["queues"].pop(queue_id, None)
 
 
-# OAuth pending state — Redis with TTL
+# OAuth pending state — Redis with TTL, or in-memory with manual expiry check
 # The PKCE code_verifier (if used) is stored alongside the state so it can be
 # restored when the flow is reconstructed during the callback.
 
@@ -166,8 +200,6 @@ async def store_state(
     ttl = int((expiry - datetime.now(timezone.utc)).total_seconds())
     if ttl <= 0:
         return
-    # Prefer the explicitly-supplied verifier (generated by the caller); fall back to
-    # requests_oauthlib's internal attribute for older library versions.
     if code_verifier is None:
         code_verifier = getattr(flow.oauth2session, "_code_verifier", None)
     log.debug("store_state: code_verifier present=%s", code_verifier is not None)
@@ -175,14 +207,25 @@ async def store_state(
         "code_verifier": code_verifier,
         "code_challenge_method": "S256" if code_verifier else None,
     })
-    await _get_redis().set(_state_key(state), value, ex=ttl)
+    if settings.use_redis:
+        await _get_redis().set(_state_key(state), value, ex=ttl)
+    else:
+        _mem_states[state] = {"value": value, "expires_at": expiry}
 
 
 async def pop_state(state: str) -> Any | None:
-    raw = await _get_redis().get(_state_key(state))
-    if raw is None:
-        return None
-    await _get_redis().delete(_state_key(state))
+    if settings.use_redis:
+        raw = await _get_redis().get(_state_key(state))
+        if raw is None:
+            return None
+        await _get_redis().delete(_state_key(state))
+    else:
+        entry = _mem_states.pop(state, None)
+        if entry is None:
+            return None
+        if entry["expires_at"] < datetime.now(timezone.utc):
+            return None
+        raw = entry["value"]
 
     data = json.loads(raw)
 
@@ -193,9 +236,6 @@ async def pop_state(state: str) -> Any | None:
         scopes=app_settings.gmail_scopes,
         redirect_uri=app_settings.google_redirect_uri,
     )
-    # Restore PKCE state — set the internal attribute AND expose it as a top-level
-    # attribute so callers can pass it explicitly to fetch_token (some versions of
-    # requests_oauthlib do not read _code_verifier automatically during token exchange).
     code_verifier = data.get("code_verifier")
     if code_verifier:
         flow.oauth2session._code_verifier = code_verifier

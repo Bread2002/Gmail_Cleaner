@@ -1,11 +1,13 @@
 // Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 // Gmail Cleaner
 // Last Updated: May 28th, 2026
-// Description: Bulk action bar for managing multiple senders at once, including bulk trashing, blocking, and skipping.
+// Description: Bulk action bar for managing multiple senders at once. Provides "Move to Trash"
+//              (recoverable), "Delete Forever" (two-click confirm), "Block Selected", and "Skip Selected".
 
 // Import necessary modules and components
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { sendersApi } from "../../api/senders";
+import type { DeletionAction } from "../../hooks/useDeletion";
 
 // Define the props for the BulkActionBar component
 interface Props {
@@ -13,20 +15,23 @@ interface Props {
   totalCount: number;
   dryRun: boolean;
   /**
-   * IDs of senders whose emails have already been permanently deleted.
-   * The Bulk Trash button is suppressed when every selected sender is in this set.
+   * IDs of senders whose emails have already been actioned (moved to trash or deleted).
+   * The bulk action buttons are suppressed when every selected sender is in this set.
    */
-  trashedIds: Set<string>;
+  actionedIds: Set<string>;
   onSelectAll: () => void;
   onDeselectAll: () => void;
   /** Called after bulk skip/block completes with the IDs that were successfully actioned. */
   onBulkComplete: (ids: string[]) => void;
   /**
-   * Called when a real (non-dry-run) bulk-trash request returns job IDs.
+   * Called when a real (non-dry-run) bulk action request returns job IDs.
    * Senders stay visible; each SenderCard monitors its own SSE stream and
    * self-dismisses when the job finishes.
    */
-  onBulkTrashStarted: (jobs: { sender_id: string; job_id: string }[]) => void;
+  onBulkActionStarted: (
+    jobs: { sender_id: string; job_id: string }[],
+    action: DeletionAction,
+  ) => void;
 }
 
 // Define the BulkActionBar component that renders bulk action buttons for managing multiple senders
@@ -34,40 +39,88 @@ export function BulkActionBar({
   selectedIds,
   totalCount,
   dryRun,
-  trashedIds,
+  actionedIds,
   onSelectAll,
   onDeselectAll,
   onBulkComplete,
-  onBulkTrashStarted,
+  onBulkActionStarted,
 }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Two-click confirm state for "Delete Forever Selected"
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
 
   if (totalCount === 0) return null;
 
-  // Only operate on senders that haven't been trashed yet.
-  const trashableIds = selectedIds.filter((id) => !trashedIds.has(id));
-  const allSelectedTrashed =
-    selectedIds.length > 0 && trashableIds.length === 0;
+  // Only operate on senders that haven't been actioned yet.
+  const actionableIds = selectedIds.filter((id) => !actionedIds.has(id));
+  const allSelectedActioned =
+    selectedIds.length > 0 && actionableIds.length === 0;
 
-  const handleBulkTrash = async () => {
-    // Only trash senders that haven't been deleted yet; skip already-trashed ones.
-    const ids = trashableIds;
+  const handleBulkMoveToTrash = async () => {
+    const ids = actionableIds;
     if (ids.length === 0) return;
     setLoading(true);
     setStatus(null);
     try {
-      const { jobs } = await sendersApi.bulkTrash(ids, dryRun);
+      const { jobs } = await sendersApi.bulkMoveToTrash(ids, dryRun);
       if (dryRun) {
-        setStatus(`🧪 Would trash emails from ${jobs.length} sender(s)`);
-        // Dry-run: no real work happening, dismiss immediately.
+        setStatus(`🧪 Would move emails from ${jobs.length} sender(s) to Trash`);
         onBulkComplete(jobs.map((j) => j.sender_id));
       } else {
-        setStatus(`🗑️ Trashing ${jobs.length} sender(s)…`);
-        // Real trash: hand off job IDs so each SenderCard can monitor SSE
-        // progress and self-dismiss when its job completes.
-        onBulkTrashStarted(jobs);
+        setStatus(`🗑️ Moving ${jobs.length} sender(s) to Trash…`);
+        onBulkActionStarted(jobs, "moveToTrash");
       }
+    } catch (e: any) {
+      setStatus(`❌ ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteClick = async () => {
+    if (dryRun) {
+      const ids = actionableIds;
+      if (ids.length === 0) return;
+      setLoading(true);
+      setStatus(null);
+      try {
+        const { jobs } = await sendersApi.bulkDeleteForever(ids, dryRun);
+        setStatus(`🧪 Would permanently delete emails from ${jobs.length} sender(s)`);
+        onBulkComplete(jobs.map((j) => j.sender_id));
+      } catch (e: any) {
+        setStatus(`❌ ${e.message}`);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      confirmTimerRef.current = setTimeout(() => setDeleteConfirm(false), 3000);
+      return;
+    }
+
+    // Second click — execute
+    clearTimeout(confirmTimerRef.current!);
+    setDeleteConfirm(false);
+
+    const ids = actionableIds;
+    if (ids.length === 0) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const { jobs } = await sendersApi.bulkDeleteForever(ids, false);
+      setStatus(`✕ Permanently deleting ${jobs.length} sender(s)…`);
+      onBulkActionStarted(jobs, "deleteForever");
     } catch (e: any) {
       setStatus(`❌ ${e.message}`);
     } finally {
@@ -87,7 +140,6 @@ export function BulkActionBar({
           ? `🧪 Would block ${ids.length} sender(s)`
           : `🚫 Blocked ${blocked.length} sender(s)${failed.length ? `, ${failed.length} failed` : ""}`,
       );
-      // Dismiss all selected — status message already reports any failures.
       onBulkComplete(ids);
     } catch (e: any) {
       setStatus(`❌ ${e.message}`);
@@ -106,7 +158,6 @@ export function BulkActionBar({
       setStatus(
         `⏭ Skipped ${skipped.length} sender(s)${failed.length ? `, ${failed.length} not found` : ""}`,
       );
-      // Backend returns confirmed IDs — only dismiss those.
       onBulkComplete(skipped);
     } catch (e: any) {
       setStatus(`❌ ${e.message}`);
@@ -138,22 +189,50 @@ export function BulkActionBar({
       </div>
 
       <div className="flex gap-2 ml-auto flex-wrap">
+        {/* Move to Trash — single click, recoverable via Gmail for 30 days */}
         <button
-          onClick={handleBulkTrash}
-          disabled={selectedIds.length === 0 || loading || allSelectedTrashed}
+          onClick={handleBulkMoveToTrash}
+          disabled={selectedIds.length === 0 || loading || allSelectedActioned}
           title={
-            allSelectedTrashed
-              ? "All selected senders have already been trashed"
+            allSelectedActioned
+              ? "All selected senders have already been actioned"
               : undefined
           }
           className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors
             ${
               dryRun
                 ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
-                : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
+                : "bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200"
             } disabled:opacity-40 disabled:cursor-not-allowed`}
         >
-          {dryRun ? "🧪 Preview Trash" : "🗑️ Trash Selected"}
+          {dryRun ? "🧪 Preview Trash" : "🗑️ Move to Trash"}
+        </button>
+
+        {/* Delete Forever — two-click confirm to prevent accidents */}
+        <button
+          onClick={handleBulkDeleteClick}
+          disabled={selectedIds.length === 0 || loading || allSelectedActioned}
+          title={
+            allSelectedActioned
+              ? "All selected senders have already been actioned"
+              : deleteConfirm
+                ? "Click again to permanently delete"
+                : undefined
+          }
+          className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+            ${
+              dryRun
+                ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
+                : deleteConfirm
+                  ? "bg-red-600 hover:bg-red-700 text-white border border-red-600 animate-pulse"
+                  : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
+            }`}
+        >
+          {dryRun
+            ? "🧪 Preview Delete"
+            : deleteConfirm
+              ? "⚠️ Confirm Delete?"
+              : "✕ Delete Forever"}
         </button>
 
         <button

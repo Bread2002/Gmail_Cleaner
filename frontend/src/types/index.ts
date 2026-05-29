@@ -77,13 +77,13 @@ export interface BlockResponse {
   sender: string;
 }
 
-export interface BulkTrashJob {
+export interface BulkDeleteJob {
   sender_id: string;
   job_id: string;
 }
 
-export interface BulkTrashResponse {
-  jobs: BulkTrashJob[];
+export interface BulkDeleteResponse {
+  jobs: BulkDeleteJob[];
 }
 
 export interface BulkBlockResponse {

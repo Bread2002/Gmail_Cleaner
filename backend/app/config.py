@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Configure session management
     session_ttl_seconds: int = 3600
     redis_url: str = "redis://localhost:6379"
+    use_redis: bool = True  # Set USE_REDIS=false in .env to run without Redis (local dev only)
 
     # Configure Gmail OAuth scopes
     gmail_scopes: List[str] = [

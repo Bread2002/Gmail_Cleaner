@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
 # Last Updated: May 24th, 2026
-# Description: Defines API endpoints for managing flagged senders and related actions (preview, trash, block) with authentication via session tokens.
+# Description: Defines API endpoints for managing flagged senders and related actions (preview, delete, block) with authentication via session tokens.
 
 # Import necessary libraries and modules
 from __future__ import annotations
@@ -18,11 +18,15 @@ from googleapiclient.discovery import build as build_service
 
 from app.models.sender import (
     PreviewResponse,
-    TrashRequest,
-    TrashStartResponse,
+    DeleteRequest,
+    DeleteStartResponse,
     BlockResponse,
-    BulkTrashRequest,
-    BulkTrashResponse,
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    MoveToTrashRequest,
+    MoveToTrashStartResponse,
+    BulkMoveToTrashRequest,
+    BulkMoveToTrashResponse,
     BulkBlockRequest,
     BulkBlockResponse,
     BulkSkipRequest,
@@ -33,7 +37,7 @@ from app.dependencies import (
     get_session_from_query,
     get_gmail_service,
 )
-from app.services import gmail_trash, gmail_filter
+from app.services import gmail_delete, gmail_move_to_trash, gmail_filter
 from app import store
 
 # Define the API router for senders-related endpoints with a prefix and tags for documentation
@@ -57,13 +61,13 @@ def _get_session_token(session: dict) -> str:
     return session["_token"]
 
 
-# Define the POST endpoint to start batch-trash jobs for multiple senders (requires authentication via session token)
-@router.post("/bulk/trash", response_model=BulkTrashResponse)
-async def bulk_trash(
-    body: BulkTrashRequest,
+# Define the POST endpoint to start batch-delete jobs for multiple senders (requires authentication via session token)
+@router.post("/bulk/delete", response_model=BulkDeleteResponse)
+async def bulk_delete(
+    body: BulkDeleteRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
-) -> BulkTrashResponse:
-    """Start batch-trash jobs for multiple senders (requires authentication via session token)."""
+) -> BulkDeleteResponse:
+    """Start batch-delete jobs for multiple senders (requires authentication via session token)."""
     session_token = _get_session_token(session)
     credentials = session["credentials"]
     jobs = []
@@ -82,19 +86,19 @@ async def bulk_trash(
         task_service = build_service("gmail", "v1", credentials=credentials)
 
         asyncio.create_task(
-            gmail_trash.run_trash(
+            gmail_delete.run_delete(
                 service=task_service,
                 queue=queue,
                 sender_email=sender_email,
                 dry_run=body.dry_run,
                 store_result_fn=lambda r, jid=job_id: store.session.store_scan_result(
-                    session_token, f"trash_{jid}", r
+                    session_token, f"delete_{jid}", r
                 ),
             )
         )
         jobs.append({"sender_id": sender_id, "job_id": job_id})
 
-    return BulkTrashResponse(jobs=jobs)
+    return BulkDeleteResponse(jobs=jobs)
 
 
 # Define the POST endpoint to start batch-block jobs for multiple senders (requires authentication via session token)
@@ -141,6 +145,44 @@ async def bulk_skip(
             failed.append(sender_id)
 
     return BulkSkipResponse(skipped=skipped, failed=failed)
+
+
+# Define the POST endpoint to start batch-move-to-trash jobs for multiple senders (requires authentication via session token)
+@router.post("/bulk/move-to-trash", response_model=BulkMoveToTrashResponse)
+async def bulk_move_to_trash(
+    body: BulkMoveToTrashRequest,
+    session: Annotated[dict, Depends(get_session_from_header)],
+) -> BulkMoveToTrashResponse:
+    """Start batch-move-to-trash jobs for multiple senders (recoverable for 30 days via Gmail)."""
+    session_token = _get_session_token(session)
+    credentials = session["credentials"]
+    jobs = []
+
+    for sender_id in body.sender_ids:
+        sender = _find_sender_in_scan(session, sender_id)
+        if sender is None:
+            continue
+
+        job_id = str(uuid.uuid4())
+        sender_email = sender["email"]
+        queue = store.session.create_queue(session_token, job_id)
+
+        task_service = build_service("gmail", "v1", credentials=credentials)
+
+        asyncio.create_task(
+            gmail_move_to_trash.run_move_to_trash(
+                service=task_service,
+                queue=queue,
+                sender_email=sender_email,
+                dry_run=body.dry_run,
+                store_result_fn=lambda r, jid=job_id: store.session.store_scan_result(
+                    session_token, f"move_to_trash_{jid}", r
+                ),
+            )
+        )
+        jobs.append({"sender_id": sender_id, "job_id": job_id})
+
+    return BulkMoveToTrashResponse(jobs=jobs)
 
 
 # Define the GET endpoint to retrieve a preview of the sender's most recent message (requires authentication via session token)
@@ -216,15 +258,15 @@ async def get_preview(
     )
 
 
-# Define the POST endpoint to start a batch-trash job for all messages from a specific sender (requires authentication via session token)
-@router.post("/{sender_id}/trash", response_model=TrashStartResponse)
-async def start_trash(
+# Define the POST endpoint to start a batch-delete job for all messages from a specific sender (requires authentication via session token)
+@router.post("/{sender_id}/delete", response_model=DeleteStartResponse)
+async def start_delete(
     sender_id: str,
-    body: TrashRequest,
+    body: DeleteRequest,
     session: Annotated[dict, Depends(get_session_from_header)],
     service: Annotated[object, Depends(get_gmail_service)],
-) -> TrashStartResponse:
-    """Start a batch-trash job for all messages from a specific sender (requires authentication via session token)."""
+) -> DeleteStartResponse:
+    """Start a batch-delete job for all messages from a specific sender (requires authentication via session token)."""
     sender = _find_sender_in_scan(session, sender_id)
     if sender is None:
         raise HTTPException(status_code=404, detail="Sender not found")
@@ -236,14 +278,14 @@ async def start_trash(
 
     queue = store.session.create_queue(session_token, job_id)
 
-    trash_results: dict = {}
+    delete_results: dict = {}
 
     def _store_result(result: dict) -> None:
-        trash_results.update(result)
-        store.session.store_scan_result(session_token, f"trash_{job_id}", result)
+        delete_results.update(result)
+        store.session.store_scan_result(session_token, f"delete_{job_id}", result)
 
     asyncio.create_task(
-        gmail_trash.run_trash(
+        gmail_delete.run_delete(
             service=service,
             queue=queue,
             sender_email=sender_email,
@@ -252,25 +294,25 @@ async def start_trash(
         )
     )
 
-    return TrashStartResponse(
+    return DeleteStartResponse(
         job_id=job_id, sender=sender_email, estimated_count=estimated_count
     )
 
 
-# Define the GET endpoint to retrieve a stream of progress updates for a batch-trash job (requires authentication via session token)
-@router.get("/{sender_id}/trash/{job_id}/stream")
-async def trash_stream(
+# Define the GET endpoint to retrieve a stream of progress updates for a batch-delete job (requires authentication via session token)
+@router.get("/{sender_id}/delete/{job_id}/stream")
+async def delete_stream(
     sender_id: str,
     job_id: str,
     session: Annotated[dict, Depends(get_session_from_query)],
 ) -> StreamingResponse:
-    """Stream progress updates for a batch-trash job via Server-Sent Events (SSE) (requires authentication via session token)."""
+    """Stream progress updates for a batch-delete job via Server-Sent Events (SSE) (requires authentication via session token)."""
     session_token = _get_session_token(session)
     queue = store.session.get_queue(session_token, job_id)
     if queue is None:
-        raise HTTPException(status_code=404, detail="Trash job not found")
+        raise HTTPException(status_code=404, detail="Delete job not found")
 
-    log.info("SSE trash stream opened for job %s", job_id)
+    log.info("SSE delete stream opened for job %s", job_id)
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
@@ -279,25 +321,116 @@ async def trash_stream(
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=60.0)
                 except asyncio.TimeoutError:
-                    log.debug("SSE trash heartbeat for job %s", job_id)
+                    log.debug("SSE delete heartbeat for job %s", job_id)
                     yield ": heartbeat\n\n"
                     continue
 
                 if event is None:
-                    log.info("SSE trash stream for job %s complete", job_id)
+                    log.info("SSE delete stream for job %s complete", job_id)
                     yield "event: done\ndata: {}\n\n"
                     break
 
                 event_type = event["type"]
                 data = json.dumps(event["data"])
-                log.debug("SSE trash → %s: %s", event_type, data[:120])
+                log.debug("SSE delete → %s: %s", event_type, data[:120])
                 yield f"event: {event_type}\ndata: {data}\n\n"
 
         except asyncio.CancelledError:
-            log.info("SSE trash stream for job %s cancelled", job_id)
+            log.info("SSE delete stream for job %s cancelled", job_id)
         finally:
             store.session.delete_queue(session_token, job_id)
-            log.info("SSE trash stream for job %s closed", job_id)
+            log.info("SSE delete stream for job %s closed", job_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# Define the POST endpoint to start a move-to-trash job for all messages from a specific sender (requires authentication via session token)
+@router.post("/{sender_id}/move-to-trash", response_model=MoveToTrashStartResponse)
+async def start_move_to_trash(
+    sender_id: str,
+    body: MoveToTrashRequest,
+    session: Annotated[dict, Depends(get_session_from_header)],
+    service: Annotated[object, Depends(get_gmail_service)],
+) -> MoveToTrashStartResponse:
+    """Start a move-to-trash job for all messages from a specific sender (recoverable for 30 days via Gmail)."""
+    sender = _find_sender_in_scan(session, sender_id)
+    if sender is None:
+        raise HTTPException(status_code=404, detail="Sender not found")
+
+    session_token = _get_session_token(session)
+    job_id = str(uuid.uuid4())
+    sender_email = sender["email"]
+    estimated_count = sender.get("message_count", 0)
+
+    queue = store.session.create_queue(session_token, job_id)
+
+    move_results: dict = {}
+
+    def _store_result(result: dict) -> None:
+        move_results.update(result)
+        store.session.store_scan_result(
+            session_token, f"move_to_trash_{job_id}", result
+        )
+
+    asyncio.create_task(
+        gmail_move_to_trash.run_move_to_trash(
+            service=service,
+            queue=queue,
+            sender_email=sender_email,
+            dry_run=body.dry_run,
+            store_result_fn=_store_result,
+        )
+    )
+
+    return MoveToTrashStartResponse(
+        job_id=job_id, sender=sender_email, estimated_count=estimated_count
+    )
+
+
+# Define the GET endpoint to retrieve a stream of progress updates for a move-to-trash job (requires authentication via session token)
+@router.get("/{sender_id}/move-to-trash/{job_id}/stream")
+async def move_to_trash_stream(
+    sender_id: str,
+    job_id: str,
+    session: Annotated[dict, Depends(get_session_from_query)],
+) -> StreamingResponse:
+    """Stream progress updates for a move-to-trash job via Server-Sent Events (SSE)."""
+    session_token = _get_session_token(session)
+    queue = store.session.get_queue(session_token, job_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Move-to-trash job not found")
+
+    log.info("SSE move-to-trash stream opened for job %s", job_id)
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=60.0)
+                except asyncio.TimeoutError:
+                    log.debug("SSE move-to-trash heartbeat for job %s", job_id)
+                    yield ": heartbeat\n\n"
+                    continue
+
+                if event is None:
+                    log.info("SSE move-to-trash stream for job %s complete", job_id)
+                    yield "event: done\ndata: {}\n\n"
+                    break
+
+                event_type = event["type"]
+                data = json.dumps(event["data"])
+                log.debug("SSE move-to-trash → %s: %s", event_type, data[:120])
+                yield f"event: {event_type}\ndata: {data}\n\n"
+
+        except asyncio.CancelledError:
+            log.info("SSE move-to-trash stream for job %s cancelled", job_id)
+        finally:
+            store.session.delete_queue(session_token, job_id)
+            log.info("SSE move-to-trash stream for job %s closed", job_id)
 
     return StreamingResponse(
         event_generator(),

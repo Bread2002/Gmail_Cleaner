@@ -1,7 +1,8 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
-# Description: Defines various tests for the API endpoints.
+# Last Updated: May 28th, 2026
+# Description: Defines various tests for the API endpoints, including permanent deletion (/delete)
+#              and recoverable move-to-trash (/move-to-trash) sender endpoints.
 
 # Import necessary libraries and modules
 from __future__ import annotations
@@ -70,15 +71,21 @@ class TestAuthMe:
     # Test that the GET endpoint returns a 401 status code for an expired session
     async def test_returns_401_for_expired_session(self, client):
         import json
+
         token = str(uuid.uuid4())
         expired_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         creds = MagicMock()
-        creds.to_json.return_value = json.dumps({
-            "token": "t", "refresh_token": "r",
-            "client_id": "c", "client_secret": "s",
-            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
-            "expiry": "2099-12-31T23:59:59Z",
-        })
+        creds.to_json.return_value = json.dumps(
+            {
+                "token": "t",
+                "refresh_token": "r",
+                "client_id": "c",
+                "client_secret": "s",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": [],
+                "expiry": "2099-12-31T23:59:59Z",
+            }
+        )
         await session_store.create_session(token, creds, "old@gmail.com", expired_at)
 
         r = await client.get("/auth/me", headers=_auth(token))
@@ -280,29 +287,29 @@ class TestSenderPreview:
         assert body["snippet"] == "Click here"
 
 
-# Define a test class for the /senders/{id}/trash endpoint
-class TestSenderTrash:
+# Define a test class for the /senders/{id}/delete endpoint
+class TestSenderDelete:
     # Test that the POST endpoint returns a 404 status code when the requested sender_id is not in the user's session
     async def test_returns_404_when_sender_not_in_session(self, client, session_token):
         with patch("app.dependencies.build", return_value=MagicMock()):
             r = await client.post(
-                f"/senders/{uuid.uuid4()}/trash",
+                f"/senders/{uuid.uuid4()}/delete",
                 headers=_auth(session_token),
                 json={"dry_run": True},
             )
         assert r.status_code == 404
 
-    # Test that the POST endpoint returns a job_id, sender email, and estimated count when a trash job is successfully queued for a sender
+    # Test that the POST endpoint returns a job_id, sender email, and estimated count when a delete job is successfully queued for a sender
     async def test_returns_job_id_sender_email_and_estimated_count(
         self, client, session_with_sender
     ):
         token, sender_id, sender_email = session_with_sender
 
         with patch("app.dependencies.build", return_value=MagicMock()), patch(
-            "app.services.gmail_trash.run_trash", new_callable=AsyncMock
+            "app.services.gmail_delete.run_delete", new_callable=AsyncMock
         ):
             r = await client.post(
-                f"/senders/{sender_id}/trash",
+                f"/senders/{sender_id}/delete",
                 headers=_auth(token),
                 json={"dry_run": False},
             )
@@ -347,12 +354,12 @@ class TestSenderBlock:
         assert r.status_code == 401
 
 
-# Define a test class for the /senders/bulk/trash endpoint
-class TestBulkTrash:
+# Define a test class for the /senders/bulk/delete endpoint
+class TestBulkDelete:
     # Test that the POST endpoint returns a 401 status code when no authorization header is present
     async def test_returns_401_without_auth(self, client):
         r = await client.post(
-            "/senders/bulk/trash", json={"sender_ids": [], "dry_run": False}
+            "/senders/bulk/delete", json={"sender_ids": [], "dry_run": False}
         )
         assert r.status_code == 401
 
@@ -365,9 +372,9 @@ class TestBulkTrash:
 
         with patch(
             "app.routers.senders.build_service", return_value=MagicMock()
-        ), patch("app.services.gmail_trash.run_trash", new_callable=AsyncMock):
+        ), patch("app.services.gmail_delete.run_delete", new_callable=AsyncMock):
             r = await client.post(
-                "/senders/bulk/trash",
+                "/senders/bulk/delete",
                 headers=_auth(token),
                 json={"sender_ids": [sender_id], "dry_run": False},
             )
@@ -387,9 +394,9 @@ class TestBulkTrash:
 
         with patch(
             "app.routers.senders.build_service", return_value=MagicMock()
-        ), patch("app.services.gmail_trash.run_trash", new_callable=AsyncMock):
+        ), patch("app.services.gmail_delete.run_delete", new_callable=AsyncMock):
             r = await client.post(
-                "/senders/bulk/trash",
+                "/senders/bulk/delete",
                 headers=_auth(token),
                 json={"sender_ids": [sender_id, unknown], "dry_run": False},
             )
@@ -437,9 +444,9 @@ class TestBulkTrash:
 
         with patch(
             "app.routers.senders.build_service", side_effect=counting_build
-        ), patch("app.services.gmail_trash.run_trash", new_callable=AsyncMock):
+        ), patch("app.services.gmail_delete.run_delete", new_callable=AsyncMock):
             r = await client.post(
-                "/senders/bulk/trash",
+                "/senders/bulk/delete",
                 headers=_auth(token),
                 json={"sender_ids": [sender_id, second_id], "dry_run": False},
             )
@@ -456,19 +463,19 @@ class TestBulkTrash:
         self, client, session_token
     ):
         r = await client.post(
-            "/senders/bulk/trash",
+            "/senders/bulk/delete",
             headers=_auth(session_token),
             json={"sender_ids": [], "dry_run": False},
         )
         assert r.status_code == 200
         assert r.json()["jobs"] == []
 
-    # Test that the POST endpoint does not match the /{sender_id}/trash route when sender_id='bulk'
+    # Test that the POST endpoint does not match the /{sender_id}/delete route when sender_id='bulk'
     async def test_route_is_not_shadowed_by_sender_id_path_parameter(
         self, client, session_token
     ):
         r = await client.post(
-            "/senders/bulk/trash",
+            "/senders/bulk/delete",
             headers=_auth(session_token),
             json={"sender_ids": [], "dry_run": False},
         )
@@ -632,3 +639,191 @@ class TestBulkSkip:
 
         assert r.status_code == 200
         assert r.json() == {"skipped": [], "failed": []}
+
+
+# Define a test class for the /senders/{id}/move-to-trash endpoint (recoverable — moves to Gmail Trash)
+class TestSenderMoveToTrash:
+    # Test that the POST endpoint returns a 404 status code when the requested sender_id is not in the user's session
+    async def test_returns_404_when_sender_not_in_session(self, client, session_token):
+        with patch("app.dependencies.build", return_value=MagicMock()):
+            r = await client.post(
+                f"/senders/{uuid.uuid4()}/move-to-trash",
+                headers=_auth(session_token),
+                json={"dry_run": True},
+            )
+        assert r.status_code == 404
+
+    # Test that the POST endpoint returns a job_id, sender email, and estimated count when a move-to-trash job is successfully queued
+    async def test_returns_job_id_sender_email_and_estimated_count(
+        self, client, session_with_sender
+    ):
+        token, sender_id, sender_email = session_with_sender
+
+        with patch("app.dependencies.build", return_value=MagicMock()), patch(
+            "app.services.gmail_move_to_trash.run_move_to_trash",
+            new_callable=AsyncMock,
+        ):
+            r = await client.post(
+                f"/senders/{sender_id}/move-to-trash",
+                headers=_auth(token),
+                json={"dry_run": False},
+            )
+
+        assert r.status_code == 200
+        body = r.json()
+        uuid.UUID(body["job_id"])
+        assert body["sender"] == sender_email
+        assert body["estimated_count"] == 50  # matches fixture message_count
+
+    # Test that the POST endpoint returns a 401 status code when no authorization header is present
+    async def test_returns_401_without_auth(self, client):
+        r = await client.post(
+            f"/senders/{uuid.uuid4()}/move-to-trash",
+            json={"dry_run": False},
+        )
+        assert r.status_code == 401
+
+    # Test that the SSE stream endpoint returns 404 when the job_id does not exist in the session
+    async def test_stream_returns_404_for_unknown_job(
+        self, client, session_with_sender
+    ):
+        token, sender_id, _ = session_with_sender
+        r = await client.get(
+            f"/senders/{sender_id}/move-to-trash/{uuid.uuid4()}/stream",
+            params={"token": token},
+        )
+        assert r.status_code == 404
+
+
+# Define a test class for the /senders/bulk/move-to-trash endpoint (recoverable — moves to Gmail Trash)
+class TestBulkMoveToTrash:
+    # Test that the POST endpoint returns a 401 status code when no authorization header is present
+    async def test_returns_401_without_auth(self, client):
+        r = await client.post(
+            "/senders/bulk/move-to-trash", json={"sender_ids": [], "dry_run": False}
+        )
+        assert r.status_code == 401
+
+    # Test that the POST endpoint returns one job entry per known sender_id with a valid UUID job_id
+    async def test_returns_one_job_entry_per_known_sender(
+        self, client, session_with_sender
+    ):
+        token, sender_id, _ = session_with_sender
+
+        with patch(
+            "app.routers.senders.build_service", return_value=MagicMock()
+        ), patch(
+            "app.services.gmail_move_to_trash.run_move_to_trash",
+            new_callable=AsyncMock,
+        ):
+            r = await client.post(
+                "/senders/bulk/move-to-trash",
+                headers=_auth(token),
+                json={"sender_ids": [sender_id], "dry_run": False},
+            )
+
+        assert r.status_code == 200
+        jobs = r.json()["jobs"]
+        assert len(jobs) == 1
+        assert jobs[0]["sender_id"] == sender_id
+        uuid.UUID(jobs[0]["job_id"])
+
+    # Test that the POST endpoint silently ignores unknown sender_ids
+    async def test_silently_omits_unknown_sender_ids_from_jobs(
+        self, client, session_with_sender
+    ):
+        token, sender_id, _ = session_with_sender
+        unknown = str(uuid.uuid4())
+
+        with patch(
+            "app.routers.senders.build_service", return_value=MagicMock()
+        ), patch(
+            "app.services.gmail_move_to_trash.run_move_to_trash",
+            new_callable=AsyncMock,
+        ):
+            r = await client.post(
+                "/senders/bulk/move-to-trash",
+                headers=_auth(token),
+                json={"sender_ids": [sender_id, unknown], "dry_run": False},
+            )
+
+        jobs = r.json()["jobs"]
+        assert len(jobs) == 1
+        assert jobs[0]["sender_id"] == sender_id
+
+    # Test that the POST endpoint returns an empty jobs list when no sender_ids are provided
+    async def test_returns_empty_jobs_list_when_no_sender_ids_provided(
+        self, client, session_token
+    ):
+        r = await client.post(
+            "/senders/bulk/move-to-trash",
+            headers=_auth(session_token),
+            json={"sender_ids": [], "dry_run": False},
+        )
+        assert r.status_code == 200
+        assert r.json()["jobs"] == []
+
+    # Test that the POST endpoint is not shadowed by the /{sender_id}/move-to-trash route
+    async def test_route_is_not_shadowed_by_sender_id_path_parameter(
+        self, client, session_token
+    ):
+        r = await client.post(
+            "/senders/bulk/move-to-trash",
+            headers=_auth(session_token),
+            json={"sender_ids": [], "dry_run": False},
+        )
+        # If routing were broken this would be 404 "Sender not found"
+        assert r.status_code == 200
+
+    # Test that each sender gets its own service instance (httplib2.Http is not thread-safe)
+    async def test_each_sender_gets_its_own_service_instance(
+        self, client, session_with_sender
+    ):
+        token, sender_id, _ = session_with_sender
+        second_id = str(uuid.uuid4())
+        scan_id = str(uuid.uuid4())
+        session_store.store_scan_result(
+            token,
+            scan_id,
+            {
+                "scan_id": scan_id,
+                "status": "complete",
+                "dry_run": False,
+                "senders": [
+                    {
+                        "id": second_id,
+                        "email": "second@bulk.com",
+                        "display_name": "Second",
+                        "message_count": 5,
+                        "consecutive_unread_count": 5,
+                        "snippet": "",
+                        "subject": "",
+                        "first_message_date": None,
+                    }
+                ],
+            },
+        )
+
+        build_calls = []
+
+        def counting_build(*args, **kwargs):
+            svc = MagicMock()
+            build_calls.append(svc)
+            return svc
+
+        with patch(
+            "app.routers.senders.build_service", side_effect=counting_build
+        ), patch(
+            "app.services.gmail_move_to_trash.run_move_to_trash",
+            new_callable=AsyncMock,
+        ):
+            r = await client.post(
+                "/senders/bulk/move-to-trash",
+                headers=_auth(token),
+                json={"sender_ids": [sender_id, second_id], "dry_run": False},
+            )
+
+        assert r.status_code == 200
+        assert len(r.json()["jobs"]) == 2
+        assert len(build_calls) == 2
+        assert build_calls[0] is not build_calls[1]

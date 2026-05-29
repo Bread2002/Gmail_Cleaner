@@ -1,15 +1,23 @@
 // Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 // Gmail Cleaner
 // Last Updated: May 28th, 2026
-// Description: Sender card component that displays sender information, preview, and action buttons for managing individual senders.
+// Description: Sender card component that displays sender information, preview, and action buttons
+//              for managing individual senders (move to trash, delete forever, block, skip).
 
 // Import necessary modules and components
 import { useState, useEffect, useRef } from "react";
 import type { FlaggedSender } from "../../types";
 import { useDeletion } from "../../hooks/useDeletion";
+import type { DeletionAction } from "../../hooks/useDeletion";
 import { SenderPreview } from "./SenderPreview";
 import { ActionButtons } from "./ActionButtons";
 import { DeletionProgress } from "../deletion/DeletionProgress";
+
+// Represents an active bulk job assigned to this card.
+export interface BulkDeleteJob {
+  jobId: string;
+  action: DeletionAction;
+}
 
 // Define the props for the SenderCard component
 interface Props {
@@ -22,30 +30,29 @@ interface Props {
   /** Called the first time this sender is trashed or blocked (deselects from bulk). */
   onActioned: (id: string) => void;
   /**
-   * Called once when a real (non-dry-run) trash job finishes successfully.
-   * Used by SenderList to track which senders have been permanently deleted
-   * so the Bulk Trash button can be suppressed for already-trashed senders.
+   * Called once when a real (non-dry-run) action job finishes successfully.
+   * Used by SenderList to track which senders have been actioned so the bulk
+   * buttons can be suppressed for already-actioned senders.
    */
-  onTrashed?: (id: string) => void;
+  onActionCompleted?: (id: string) => void;
   /**
-   * Set when this card is the *currently active* bulk-trash job.
+   * Set when this card is the *currently active* bulk job.
    * The card attaches to this job's SSE stream and shows live progress.
    */
-  bulkTrashJobId?: string | null;
+  bulkDeleteJob?: BulkDeleteJob | null;
   /**
-   * Set when this card is *waiting* in the bulk-trash queue (not yet active).
+   * Set when this card is *waiting* in the bulk queue (not yet active).
    * Shows a "Queued…" indicator; no SSE is opened yet.
    */
-  isBulkTrashQueued?: boolean;
+  isBulkQueued?: boolean;
   /**
-   * Called immediately when this card's bulk-trash job completes (or errors),
-   * so the next queued job can start. The card stays visible — the user must
-   * then Block or Skip to remove it from the list.
+   * Called immediately when this card's bulk job completes (or errors),
+   * so the next queued job can start.
    */
-  onBulkTrashJobDone?: (id: string) => void;
+  onBulkJobDone?: (id: string) => void;
 }
 
-// Define the SenderCard component that renders sender information, preview, and action buttons for managing individual senders
+// Define the SenderCard component that renders sender information, preview, and action buttons
 export function SenderCard({
   sender,
   dryRun,
@@ -53,29 +60,25 @@ export function SenderCard({
   onToggleSelect,
   onDismiss,
   onActioned,
-  onTrashed,
-  bulkTrashJobId,
-  isBulkTrashQueued,
-  onBulkTrashJobDone,
+  onActionCompleted,
+  bulkDeleteJob,
+  isBulkQueued,
+  onBulkJobDone,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const deletion = useDeletion(sender.id);
   const actionedNotifiedRef = useRef(false);
-  const trashedNotifiedRef = useRef(false);
+  const completedNotifiedRef = useRef(false);
   const prevBulkJobIdRef = useRef<string | null>(null);
 
-  // Ref so the bulk-done effect can read the current bulkTrashJobId without
-  // including it in the dep array (prevents cleanup from cancelling the dismiss timer).
-  const bulkTrashJobIdRef = useRef<string | null | undefined>(null);
-  bulkTrashJobIdRef.current = bulkTrashJobId;
+  const bulkDeleteJobRef = useRef<BulkDeleteJob | null | undefined>(null);
+  bulkDeleteJobRef.current = bulkDeleteJob;
 
-  // Guard: fire onBulkTrashJobDone + schedule dismiss at most once per card.
   const bulkDoneRef = useRef(false);
 
   const { startFromJobId } = deletion;
 
-  // A sender is "actioned" once trashed or blocked individually.
   const isActioned = deletion.phase === "done" || blocked;
 
   // Deselect from bulk once actioned individually.
@@ -86,58 +89,52 @@ export function SenderCard({
     }
   }, [isActioned, sender.id, onActioned]);
 
-  // Notify parent that this sender's emails have been permanently deleted
-  // (real run only — dry-run does not count as trashed).
+  // Notify parent that this sender's emails have been actioned (real run only).
   useEffect(() => {
-    if (deletion.phase === "done" && !dryRun && !trashedNotifiedRef.current) {
-      trashedNotifiedRef.current = true;
-      onTrashed?.(sender.id);
+    if (deletion.phase === "done" && !dryRun && !completedNotifiedRef.current) {
+      completedNotifiedRef.current = true;
+      onActionCompleted?.(sender.id);
     }
-  }, [deletion.phase, dryRun, sender.id, onTrashed]);
+  }, [deletion.phase, dryRun, sender.id, onActionCompleted]);
 
-  // When the active bulk-trash job ID arrives, attach to its SSE stream.
+  // When the active bulk job arrives, attach to its SSE stream.
   useEffect(() => {
-    if (bulkTrashJobId && bulkTrashJobId !== prevBulkJobIdRef.current) {
-      prevBulkJobIdRef.current = bulkTrashJobId;
-      startFromJobId(bulkTrashJobId);
+    if (bulkDeleteJob && bulkDeleteJob.jobId !== prevBulkJobIdRef.current) {
+      prevBulkJobIdRef.current = bulkDeleteJob.jobId;
+      const endpoint =
+        bulkDeleteJob.action === "moveToTrash" ? "move-to-trash" : "trash";
+      startFromJobId(bulkDeleteJob.jobId, endpoint, bulkDeleteJob.action);
     }
-  }, [bulkTrashJobId, startFromJobId]);
+  }, [bulkDeleteJob, startFromJobId]);
 
-  // When the bulk-trash SSE finishes (done or error):
-  //   Notify the queue immediately so the next job can start.
-  //   The card stays visible — the user must then Block or Skip to leave the list.
-  //   The individual-action effect below handles auto-dismiss once trash + block are both done.
-  // We read bulkTrashJobId via ref so that a prop change (queue advancing,
-  // setting it to null) does NOT re-run this effect.
+  // When the bulk SSE finishes, notify the queue so the next job can start.
   useEffect(() => {
     const terminal = deletion.phase === "done" || deletion.phase === "error";
-    if (!terminal || !bulkTrashJobIdRef.current || bulkDoneRef.current) return;
+    if (!terminal || !bulkDeleteJobRef.current || bulkDoneRef.current) return;
     bulkDoneRef.current = true;
-    onBulkTrashJobDone?.(sender.id);
-    // Do NOT auto-dismiss — card stays for the user to Block or Skip.
-  }, [deletion.phase, sender.id, onBulkTrashJobDone]);
+    onBulkJobDone?.(sender.id);
+  }, [deletion.phase, sender.id, onBulkJobDone]);
 
-  // For individually trashed senders: auto-dismiss once trashed AND blocked.
+  // For individually actioned senders: auto-dismiss once actioned AND blocked.
   useEffect(() => {
-    if (!bulkTrashJobId && deletion.phase === "done" && blocked) {
+    if (!bulkDeleteJob && deletion.phase === "done" && blocked) {
       const timer = setTimeout(() => onDismiss(sender.id), 1500);
       return () => clearTimeout(timer);
     }
-  }, [bulkTrashJobId, deletion.phase, blocked, sender.id, onDismiss]);
+  }, [bulkDeleteJob, deletion.phase, blocked, sender.id, onDismiss]);
 
   const avatarLetter = (sender.display_name ?? sender.email)
     .charAt(0)
     .toUpperCase();
 
-  // Is this card locked because it's part of a bulk operation?
-  const isBulkLocked = !!(bulkTrashJobId || isBulkTrashQueued);
+  const isBulkLocked = !!(bulkDeleteJob || isBulkQueued);
 
   return (
     <div
       className={`bg-white rounded-xl border transition-all ${
         selected ? "border-blue-400 shadow-md" : "border-gray-200 shadow-sm"
       } ${deletion.phase === "done" ? "opacity-75" : ""} ${
-        isBulkTrashQueued ? "opacity-60" : ""
+        isBulkQueued ? "opacity-60" : ""
       }`}
     >
       <div className="p-4">
@@ -185,7 +182,7 @@ export function SenderCard({
             </div>
 
             {/* Preview toggle — hide when queued */}
-            {!isBulkTrashQueued && (
+            {!isBulkQueued && (
               <button
                 onClick={() => setExpanded((e) => !e)}
                 className="mt-1.5 text-xs text-blue-500 hover:text-blue-700 transition-colors"
@@ -197,7 +194,7 @@ export function SenderCard({
         </div>
 
         {/* Expanded preview */}
-        {expanded && !isBulkTrashQueued && (
+        {expanded && !isBulkQueued && (
           <div className="mt-3 ml-12">
             <SenderPreview
               senderId={sender.id}
@@ -209,33 +206,32 @@ export function SenderCard({
 
         {/* Action area */}
         <div className="mt-3 ml-12">
-          {isBulkTrashQueued ? (
-            /* Waiting in queue — no SSE yet */
+          {isBulkQueued ? (
             <p className="text-xs text-gray-400 italic">⏳ Queued…</p>
           ) : (
             <>
-              {/* Deletion progress — shown while running, on completion, or on error */}
               {(deletion.phase === "starting" ||
                 deletion.phase === "deleting" ||
                 deletion.phase === "done" ||
                 deletion.phase === "error") && (
                 <DeletionProgress
                   phase={deletion.phase}
+                  action={deletion.action}
                   progress={deletion.progress}
                   result={deletion.result}
                   dryRun={dryRun}
                 />
               )}
 
-              {/* Action buttons — only for individually-managed senders (not bulk-trash) */}
-              {!bulkTrashJobId &&
+              {!bulkDeleteJob &&
                 (deletion.phase === "idle" || deletion.phase === "done") && (
                   <ActionButtons
                     senderId={sender.id}
                     phase={deletion.phase}
                     dryRun={dryRun}
                     blocked={blocked}
-                    onTrash={() => deletion.trash(dryRun)}
+                    onMoveToTrash={() => deletion.moveToTrash(dryRun)}
+                    onDeleteForever={() => deletion.deleteForever(dryRun)}
                     onSkip={() => onDismiss(sender.id)}
                     onBlockComplete={() => setBlocked(true)}
                   />

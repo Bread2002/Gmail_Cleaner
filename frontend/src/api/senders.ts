@@ -9,7 +9,7 @@ import type {
   PreviewResponse,
   TrashStartResponse,
   BlockResponse,
-  BulkTrashResponse,
+  BulkDeleteResponse,
   BulkBlockResponse,
   BulkSkipResponse,
 } from "../types";
@@ -22,8 +22,16 @@ export const sendersApi = {
       .get<PreviewResponse>(`/senders/${senderId}/preview`)
       .then((r) => r.data),
 
-  // Method to move all emails from a specific sender to trash, with an optional dry run mode
-  trash: (senderId: string, dryRun = false) =>
+  // Method to move all emails from a specific sender to Gmail Trash (recoverable for 30 days)
+  moveToTrash: (senderId: string, dryRun = false) =>
+    apiClient
+      .post<TrashStartResponse>(`/senders/${senderId}/move-to-trash`, {
+        dry_run: dryRun,
+      })
+      .then((r) => r.data),
+
+  // Method to permanently delete all emails from a specific sender (irreversible)
+  deleteForever: (senderId: string, dryRun = false) =>
     apiClient
       .post<TrashStartResponse>(`/senders/${senderId}/trash`, {
         dry_run: dryRun,
@@ -36,10 +44,19 @@ export const sendersApi = {
       .post<BlockResponse>(`/senders/${senderId}/block`)
       .then((r) => r.data),
 
-  // Method to trash multiple senders at once using their sender IDs
-  bulkTrash: (senderIds: string[], dryRun = false) =>
+  // Method to move multiple senders' emails to Gmail Trash at once (recoverable for 30 days)
+  bulkMoveToTrash: (senderIds: string[], dryRun = false) =>
     apiClient
-      .post<BulkTrashResponse>("/senders/bulk/trash", {
+      .post<BulkDeleteResponse>("/senders/bulk/move-to-trash", {
+        sender_ids: senderIds,
+        dry_run: dryRun,
+      })
+      .then((r) => r.data),
+
+  // Method to permanently delete multiple senders' emails at once (irreversible)
+  bulkDeleteForever: (senderIds: string[], dryRun = false) =>
+    apiClient
+      .post<BulkDeleteResponse>("/senders/bulk/trash", {
         sender_ids: senderIds,
         dry_run: dryRun,
       })

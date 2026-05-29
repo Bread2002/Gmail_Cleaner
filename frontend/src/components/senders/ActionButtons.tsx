@@ -1,10 +1,11 @@
 // Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 // Gmail Cleaner
 // Last Updated: May 28th, 2026
-// Description: Action buttons for sender management, including trashing emails and blocking senders.
+// Description: Action buttons for sender management. Provides "Move to Trash" (recoverable),
+//              "Delete Forever" (two-click confirm, permanent), "Block Sender", and "Skip".
 
 // Import necessary modules and components
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { sendersApi } from "../../api/senders";
 import type { DeletionPhase } from "../../hooks/useDeletion";
 
@@ -14,7 +15,8 @@ interface Props {
   phase: DeletionPhase;
   dryRun: boolean;
   blocked: boolean;
-  onTrash: () => void;
+  onMoveToTrash: () => void;
+  onDeleteForever: () => void;
   onSkip: () => void;
   onBlockComplete: () => void;
 }
@@ -25,11 +27,37 @@ export function ActionButtons({
   phase,
   dryRun,
   blocked,
-  onTrash,
+  onMoveToTrash,
+  onDeleteForever,
   onSkip,
   onBlockComplete,
 }: Props) {
   const [blocking, setBlocking] = useState(false);
+  // Two-click confirm state for "Delete Forever"
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-reset the confirm state after 3 seconds if the user doesn't click again
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
+  const handleDeleteClick = () => {
+    if (dryRun) {
+      onDeleteForever();
+      return;
+    }
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      confirmTimerRef.current = setTimeout(() => setDeleteConfirm(false), 3000);
+    } else {
+      clearTimeout(confirmTimerRef.current!);
+      setDeleteConfirm(false);
+      onDeleteForever();
+    }
+  };
 
   const handleBlock = async () => {
     if (dryRun) {
@@ -83,17 +111,38 @@ export function ActionButtons({
 
   return (
     <div className="flex gap-2 flex-wrap">
+      {/* Move to Trash — single click, recoverable via Gmail for 30 days */}
       <button
-        onClick={onTrash}
+        onClick={onMoveToTrash}
         disabled={isActive}
         className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors
           ${
             dryRun
               ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
-              : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
+              : "bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200"
           } disabled:opacity-40 disabled:cursor-not-allowed`}
       >
-        {dryRun ? "🧪 Preview Trash" : "🗑️ Trash All"}
+        {dryRun ? "🧪 Preview Trash" : "🗑️ Move to Trash"}
+      </button>
+
+      {/* Delete Forever — two-click confirm on first click to prevent accidents */}
+      <button
+        onClick={handleDeleteClick}
+        disabled={isActive}
+        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+          ${
+            dryRun
+              ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
+              : deleteConfirm
+                ? "bg-red-600 hover:bg-red-700 text-white border border-red-600 animate-pulse"
+                : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
+          }`}
+      >
+        {dryRun
+          ? "🧪 Preview Delete"
+          : deleteConfirm
+            ? "⚠️ Confirm Delete?"
+            : "✕ Delete Forever"}
       </button>
 
       <button

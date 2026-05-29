@@ -36,7 +36,7 @@ export function DashboardPage() {
         <p className="text-gray-500 text-sm whitespace-nowrap">
           Finds senders with{" "}
           <strong>{settings.consecutive_unread_threshold}+</strong> consecutive
-          unread emails and lets you bulk-trash or permanently block them.
+          unread emails and lets you trash, delete, or block them.
         </p>
       </div>
 

@@ -1,7 +1,8 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
-# Description: Defines various tests for Gmail services (Parsing, scanning, blocking/ filtering, trashing)
+# Last Updated: May 28th, 2026
+# Description: Defines various tests for Gmail services (Parsing, scanning, blocking/filtering,
+#              permanent deletion via batchDelete, and recoverable move-to-trash via batchModify)
 
 # Import necessary libraries and modules
 from __future__ import annotations
@@ -15,7 +16,8 @@ import pytest
 from app.store import session as session_store
 from app.services.gmail_filter import create_block_filter
 from app.services.gmail_scan import run_scan, _extract_display_name, _extract_email
-from app.services.gmail_trash import run_trash
+from app.services.gmail_delete import run_delete
+from app.services.gmail_move_to_trash import run_move_to_trash
 
 
 # Define a test class for the email parsing helper functions
@@ -55,14 +57,20 @@ class TestSessionStore:
     async def _fresh_token(self) -> str:
         import json
         from unittest.mock import MagicMock
+
         token = str(uuid.uuid4())
         creds = MagicMock()
-        creds.to_json.return_value = json.dumps({
-            "token": "t", "refresh_token": "r",
-            "client_id": "c", "client_secret": "s",
-            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
-            "expiry": "2099-12-31T23:59:59Z",
-        })
+        creds.to_json.return_value = json.dumps(
+            {
+                "token": "t",
+                "refresh_token": "r",
+                "client_id": "c",
+                "client_secret": "s",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": [],
+                "expiry": "2099-12-31T23:59:59Z",
+            }
+        )
         await session_store.create_session(
             token,
             creds,
@@ -82,14 +90,20 @@ class TestSessionStore:
     async def test_expired_session_returns_none(self):
         import json
         from unittest.mock import MagicMock
+
         token = str(uuid.uuid4())
         creds = MagicMock()
-        creds.to_json.return_value = json.dumps({
-            "token": "t", "refresh_token": "r",
-            "client_id": "c", "client_secret": "s",
-            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
-            "expiry": "2099-12-31T23:59:59Z",
-        })
+        creds.to_json.return_value = json.dumps(
+            {
+                "token": "t",
+                "refresh_token": "r",
+                "client_id": "c",
+                "client_secret": "s",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": [],
+                "expiry": "2099-12-31T23:59:59Z",
+            }
+        )
         await session_store.create_session(
             token,
             creds,
@@ -188,6 +202,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=20,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -214,6 +229,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=20,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -235,6 +251,7 @@ class TestGmailScanService:
                 dry_run=True,
                 consecutive_unread_threshold=20,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -255,6 +272,7 @@ class TestGmailScanService:
             dry_run=False,
             consecutive_unread_threshold=20,
             max_senders=10,
+            max_messages_per_sender=100,
             store_result_fn=lambda r: store.update(r),
         )
 
@@ -291,6 +309,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=20,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -318,6 +337,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=20,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: snapshots.append(
                     {"status": r["status"], "count": len(r["senders"])}
                 ),
@@ -347,6 +367,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=99999,
                 max_senders=10,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -389,6 +410,7 @@ class TestGmailScanService:
                 dry_run=False,
                 consecutive_unread_threshold=20,
                 max_senders=2,
+                max_messages_per_sender=100,
                 store_result_fn=lambda r: store.update(r),
             )
 
@@ -396,37 +418,10 @@ class TestGmailScanService:
         assert len(store["senders"]) <= 2
 
 
-# Define a test class for the Gmail trash service
-class TestGmailTrashService:
-    # Test that run_trash constructs the correct query to include messages from the specified sender, without excluding trashed messages
-    async def test_listing_query_includes_already_trashed_messages(self):
-        svc = MagicMock()
-        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
-            "messages": [{"id": f"msg{i}"} for i in range(5)]
-        }
-        svc.users.return_value.messages.return_value.batchDelete.return_value.execute.return_value = (
-            None
-        )
-
-        with patch(
-            "app.services.gmail_trash._execute_with_backoff",
-            side_effect=lambda req: req.execute(),
-        ):
-            await run_trash(
-                service=svc,
-                queue=asyncio.Queue(),
-                sender_email="spam@bulk.com",
-                dry_run=False,
-                store_result_fn=lambda _: None,
-            )
-
-        list_call = svc.users.return_value.messages.return_value.list.call_args
-        q_arg = list_call.kwargs.get("q", "")
-        assert "spam@bulk.com" in q_arg
-        assert "-in:trash" not in q_arg
-
-    # Test that run_trash permanently deletes messages via batchDelete and does not call the messages.trash method at all
-    async def test_uses_batch_delete_not_trash(self):
+# Define a test class for the Gmail delete service
+class TestGmailDeleteService:
+    # Test that run_delete permanently deletes messages via batchDelete and does not call the messages.delete method at all
+    async def test_uses_batch_delete(self):
         svc = MagicMock()
         svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "messages": [{"id": f"msg{i}"} for i in range(10)]
@@ -436,10 +431,10 @@ class TestGmailTrashService:
         )
 
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
                 service=svc,
                 queue=asyncio.Queue(),
                 sender_email="spam@bulk.com",
@@ -448,9 +443,9 @@ class TestGmailTrashService:
             )
 
         svc.users.return_value.messages.return_value.batchDelete.assert_called()
-        svc.users.return_value.messages.return_value.trash.assert_not_called()
+        svc.users.return_value.messages.return_value.delete.assert_not_called()
 
-    # Test that run_trash emits a "complete" event with the accurate count of messages deleted
+    # Test that run_delete emits a "complete" event with the accurate count of messages deleted
     async def test_emits_complete_with_accurate_deleted_count(self):
         svc = MagicMock()
         svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
@@ -462,10 +457,10 @@ class TestGmailTrashService:
         store: dict = {}
 
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
                 service=svc,
                 queue=asyncio.Queue(),
                 sender_email="s@s.com",
@@ -473,10 +468,10 @@ class TestGmailTrashService:
                 store_result_fn=lambda r: store.update(r),
             )
 
-        assert store["trashed_count"] == 15
+        assert store["deleted_count"] == 15
         assert store["dry_run"] is False
 
-    # Test that run_trash correctly splits large lists of message IDs into batches of 1000 when calling batchDelete
+    # Test that run_delete correctly splits large lists of message IDs into batches of 1000 when calling batchDelete
     async def test_splits_large_message_lists_into_batches_of_1000(self):
         svc = MagicMock()
         svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
@@ -487,10 +482,10 @@ class TestGmailTrashService:
         )
 
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
                 service=svc,
                 queue=asyncio.Queue(),
                 sender_email="s@s.com",
@@ -503,7 +498,7 @@ class TestGmailTrashService:
         assert len(calls[0].kwargs["body"]["ids"]) == 1000
         assert len(calls[1].kwargs["body"]["ids"]) == 500
 
-    # Test that run_trash correctly handles paginated results from the Gmail API and sums the total count of messages deleted across all pages
+    # Test that run_delete correctly handles paginated results from the Gmail API and sums the total count of messages deleted across all pages
     async def test_handles_paginated_message_listing(self):
         svc = MagicMock()
         svc.users.return_value.messages.return_value.list.return_value.execute.side_effect = [
@@ -519,10 +514,10 @@ class TestGmailTrashService:
         store: dict = {}
 
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
                 service=svc,
                 queue=asyncio.Queue(),
                 sender_email="s@s.com",
@@ -530,9 +525,9 @@ class TestGmailTrashService:
                 store_result_fn=lambda r: store.update(r),
             )
 
-        assert store["trashed_count"] == 700  # 500 + 200
+        assert store["deleted_count"] == 700  # 500 + 200
 
-    # Test that when run_trash is called with dry_run=True, it reports the count of messages that would be deleted but does not call batchDelete at all
+    # Test that when run_delete is called with dry_run=True, it reports the count of messages that would be deleted but does not call batchDelete at all
     async def test_dry_run_reports_message_count_without_calling_delete(self):
         svc = MagicMock()
         svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
@@ -541,10 +536,10 @@ class TestGmailTrashService:
         store: dict = {}
 
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
                 service=svc,
                 queue=asyncio.Queue(),
                 sender_email="s@s.com",
@@ -553,10 +548,10 @@ class TestGmailTrashService:
             )
 
         assert store["dry_run"] is True
-        assert store["trashed_count"] == 20
+        assert store["deleted_count"] == 20
         svc.users.return_value.messages.return_value.batchDelete.assert_not_called()
 
-    # Test that run_trash emits an "error" event when the batchDelete method raises a hard failure
+    # Test that run_delete emits an "error" event when the batchDelete method raises a hard failure
     async def test_emits_error_when_batch_delete_fails(self):
         from googleapiclient.errors import HttpError
 
@@ -570,10 +565,230 @@ class TestGmailTrashService:
 
         q: asyncio.Queue = asyncio.Queue()
         with patch(
-            "app.services.gmail_trash._execute_with_backoff",
+            "app.services.gmail_delete._execute_with_backoff",
             side_effect=lambda req: req.execute(),
         ):
-            await run_trash(
+            await run_delete(
+                service=svc,
+                queue=q,
+                sender_email="s@s.com",
+                dry_run=False,
+                store_result_fn=lambda _: None,
+            )
+
+        events = [
+            item["type"]
+            for item in [q.get_nowait() for _ in range(q.qsize())]
+            if item is not None
+        ]
+        assert "error" in events
+        assert "complete" not in events
+
+
+# Define a test class for the Gmail move-to-trash service (recoverable — uses batchModify, not batchDelete)
+class TestGmailMoveToTrashService:
+    # Test that run_move_to_trash queries by sender email without excluding already-trashed messages
+    async def test_listing_query_includes_sender_email(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(5)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="spam@bulk.com",
+                dry_run=False,
+                store_result_fn=lambda _: None,
+            )
+
+        list_call = svc.users.return_value.messages.return_value.list.call_args
+        q_arg = list_call.kwargs.get("q", "")
+        assert "spam@bulk.com" in q_arg
+
+    # Test that run_move_to_trash uses batchModify (not batchDelete) to move messages to Gmail Trash
+    async def test_uses_batch_modify_not_batch_delete(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(10)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="spam@bulk.com",
+                dry_run=False,
+                store_result_fn=lambda _: None,
+            )
+
+        svc.users.return_value.messages.return_value.batchModify.assert_called()
+        svc.users.return_value.messages.return_value.batchDelete.assert_not_called()
+
+    # Test that run_move_to_trash passes addLabelIds=['TRASH'] in the batchModify body (not removeLabel)
+    async def test_batch_modify_body_adds_trash_label(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(5)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="s@s.com",
+                dry_run=False,
+                store_result_fn=lambda _: None,
+            )
+
+        call_kwargs = (
+            svc.users.return_value.messages.return_value.batchModify.call_args.kwargs
+        )
+        assert "TRASH" in call_kwargs["body"]["addLabelIds"]
+
+    # Test that run_move_to_trash emits a "complete" event with the accurate count of messages moved
+    async def test_emits_complete_with_accurate_moved_count(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(15)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+        store: dict = {}
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="s@s.com",
+                dry_run=False,
+                store_result_fn=lambda r: store.update(r),
+            )
+
+        assert store["trashed_count"] == 15
+        assert store["dry_run"] is False
+
+    # Test that run_move_to_trash correctly splits large message lists into batches of 1000
+    async def test_splits_large_message_lists_into_batches_of_1000(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(1500)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="s@s.com",
+                dry_run=False,
+                store_result_fn=lambda _: None,
+            )
+
+        calls = svc.users.return_value.messages.return_value.batchModify.call_args_list
+        assert len(calls) == 2
+        assert len(calls[0].kwargs["body"]["ids"]) == 1000
+        assert len(calls[1].kwargs["body"]["ids"]) == 500
+
+    # Test that run_move_to_trash handles paginated results and sums the total correctly
+    async def test_handles_paginated_message_listing(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.side_effect = [
+            {
+                "messages": [{"id": f"p1_{i}"} for i in range(500)],
+                "nextPageToken": "tok",
+            },
+            {"messages": [{"id": f"p2_{i}"} for i in range(200)]},
+        ]
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.return_value = (
+            None
+        )
+        store: dict = {}
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="s@s.com",
+                dry_run=False,
+                store_result_fn=lambda r: store.update(r),
+            )
+
+        assert store["trashed_count"] == 700  # 500 + 200
+
+    # Test that when run_move_to_trash is called with dry_run=True, it reports the count without calling batchModify
+    async def test_dry_run_reports_count_without_calling_batch_modify(self):
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(20)],
+        }
+        store: dict = {}
+
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
+                service=svc,
+                queue=asyncio.Queue(),
+                sender_email="s@s.com",
+                dry_run=True,
+                store_result_fn=lambda r: store.update(r),
+            )
+
+        assert store["dry_run"] is True
+        assert store["trashed_count"] == 20
+        svc.users.return_value.messages.return_value.batchModify.assert_not_called()
+
+    # Test that run_move_to_trash emits an "error" event when batchModify raises a hard failure
+    async def test_emits_error_when_batch_modify_fails(self):
+        from googleapiclient.errors import HttpError
+
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": f"msg{i}"} for i in range(10)]
+        }
+        svc.users.return_value.messages.return_value.batchModify.return_value.execute.side_effect = HttpError(
+            resp=MagicMock(status=429), content=b"rateLimitExceeded"
+        )
+
+        q: asyncio.Queue = asyncio.Queue()
+        with patch(
+            "app.services.gmail_move_to_trash._execute_with_backoff",
+            side_effect=lambda req: req.execute(),
+        ):
+            await run_move_to_trash(
                 service=svc,
                 queue=q,
                 sender_email="s@s.com",

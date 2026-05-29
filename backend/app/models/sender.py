@@ -1,7 +1,8 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
-# Description: Defines Pydantic models for representing flagged senders, scan requests, scan results, and actions like trashing or blocking senders.
+# Last Updated: May 28th, 2026
+# Description: Defines Pydantic models for representing flagged senders, scan requests, scan results,
+#              and actions like move-to-trash, permanent deletion, or blocking senders.
 #              These models are used for data validation and serialization in the application's API endpoints and services.
 
 # Import necessary libraries and modules
@@ -62,13 +63,13 @@ class PreviewResponse(BaseModel):
     date: Optional[datetime] = None
 
 
-# Define a Pydantic model for representing a request to trash emails from a sender
-class TrashRequest(BaseModel):
+# Define a Pydantic model for representing a request to delete emails from a sender
+class DeleteRequest(BaseModel):
     dry_run: bool = False
 
 
-# Define a Pydantic model for representing the response when starting to trash emails from a sender
-class TrashStartResponse(BaseModel):
+# Define a Pydantic model for representing the response when starting to delete emails from a sender
+class DeleteStartResponse(BaseModel):
     job_id: str
     sender: str
     estimated_count: int
@@ -80,14 +81,37 @@ class BlockResponse(BaseModel):
     sender: str
 
 
-# Define a Pydantic model for representing a request when bulk trashing senders
-class BulkTrashRequest(BaseModel):
+# Define a Pydantic model for representing a request when bulk deleting senders
+class BulkDeleteRequest(BaseModel):
     sender_ids: List[str]
     dry_run: bool = False
 
 
-# Define a Pydantic model for representing the response when bulk trashing senders
-class BulkTrashResponse(BaseModel):
+# Define a Pydantic model for representing the response when bulk deleting senders
+class BulkDeleteResponse(BaseModel):
+    jobs: List[dict]
+
+
+# Define a Pydantic model for representing a request to move emails from a sender to Gmail Trash (recoverable for 30 days)
+class MoveToTrashRequest(BaseModel):
+    dry_run: bool = False
+
+
+# Define a Pydantic model for representing the response when starting to move emails from a sender to Gmail Trash
+class MoveToTrashStartResponse(BaseModel):
+    job_id: str
+    sender: str
+    estimated_count: int
+
+
+# Define a Pydantic model for representing a request when bulk moving senders to Gmail Trash
+class BulkMoveToTrashRequest(BaseModel):
+    sender_ids: List[str]
+    dry_run: bool = False
+
+
+# Define a Pydantic model for representing the response when bulk moving senders to Gmail Trash
+class BulkMoveToTrashResponse(BaseModel):
     jobs: List[dict]
 
 

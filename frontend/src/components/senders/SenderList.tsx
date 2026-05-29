@@ -1,12 +1,15 @@
 // Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 // Gmail Cleaner
 // Last Updated: May 28th, 2026
-// Description: Sender list component that renders a list of senders with bulk action capabilities, including selection, and bulk trashing.
+// Description: Sender list component that renders a list of senders with bulk action capabilities,
+//              including selection, move-to-trash, and delete-forever.
 
 // Import necessary modules and components
 import { useState, useCallback, useMemo } from "react";
 import type { FlaggedSender } from "../../types";
+import type { DeletionAction } from "../../hooks/useDeletion";
 import { SenderCard } from "./SenderCard";
+import type { BulkDeleteJob } from "./SenderCard";
 import { BulkActionBar } from "./BulkActionBar";
 
 // Define the props for the SenderList component
@@ -15,35 +18,36 @@ interface Props {
   dryRun: boolean;
 }
 
-// Define the SenderList component that renders a list of senders
-interface BulkTrashJob {
+// Internal shape for queued bulk jobs
+interface QueuedBulkJob {
   sender_id: string;
   job_id: string;
+  action: DeletionAction;
 }
 
-// Define the SenderList component that renders a list of senders with bulk action capabilities, including selection, and bulk trashing
+// Define the SenderList component that renders a list of senders with bulk action capabilities
 export function SenderList({ senders, dryRun }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // Tracks senders removed from the visible list (skipped, blocked, or bulk-trash done).
+  // Tracks senders removed from the visible list (skipped, blocked, or bulk job done).
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  // Tracks senders whose emails have been permanently deleted (real runs only).
-  // Used to suppress the Bulk Trash button for already-trashed senders.
-  const [trashedIds, setTrashedIds] = useState<Set<string>>(new Set());
+  // Tracks senders whose emails have been actioned (real runs only).
+  // Used to suppress bulk action buttons for already-actioned senders.
+  const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
 
-  // --- Bulk-trash queue -------------------------------------------------
-  // Jobs are processed one at a time. `bulkTrashActiveIdx` points to the
+  // --- Bulk job queue ---------------------------------------------------
+  // Jobs are processed one at a time. `bulkActiveIdx` points to the
   // currently active job; cards at higher indices show "Queued…".
-  const [bulkTrashQueue, setBulkTrashQueue] = useState<BulkTrashJob[]>([]);
-  const [bulkTrashActiveIdx, setBulkTrashActiveIdx] = useState(-1);
+  const [bulkQueue, setBulkQueue] = useState<QueuedBulkJob[]>([]);
+  const [bulkActiveIdx, setBulkActiveIdx] = useState(-1);
 
   // Derived: which job is currently active, and which sender IDs are still waiting.
-  const activeBulkJob = bulkTrashQueue[bulkTrashActiveIdx] ?? null;
+  const activeBulkJob = bulkQueue[bulkActiveIdx] ?? null;
   const queuedSenderIds = useMemo(
     () =>
       new Set(
-        bulkTrashQueue.slice(bulkTrashActiveIdx + 1).map((j) => j.sender_id),
+        bulkQueue.slice(bulkActiveIdx + 1).map((j) => j.sender_id),
       ),
-    [bulkTrashQueue, bulkTrashActiveIdx],
+    [bulkQueue, bulkActiveIdx],
   );
   // ----------------------------------------------------------------------
 
@@ -74,31 +78,33 @@ export function SenderList({ senders, dryRun }: Props) {
   }, []);
 
   /**
-   * Called when a real (non-dry-run) bulk-trash request returns job IDs.
-   * Populates the queue and starts the first job; subsequent jobs become
-   * "Queued…" until each preceding job finishes.
+   * Called when a real bulk action request returns job IDs.
+   * Populates the queue and starts the first job; subsequent jobs show "Queued…".
    */
-  const handleBulkTrashStarted = useCallback((jobs: BulkTrashJob[]) => {
-    if (jobs.length === 0) return;
-    setBulkTrashQueue(jobs);
-    setBulkTrashActiveIdx(0);
-    // Deselect all senders that are now in the queue.
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      jobs.forEach((j) => next.delete(j.sender_id));
-      return next;
-    });
-  }, []);
+  const handleBulkActionStarted = useCallback(
+    (jobs: { sender_id: string; job_id: string }[], action: DeletionAction) => {
+      if (jobs.length === 0) return;
+      const queuedJobs: QueuedBulkJob[] = jobs.map((j) => ({ ...j, action }));
+      setBulkQueue(queuedJobs);
+      setBulkActiveIdx(0);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        jobs.forEach((j) => next.delete(j.sender_id));
+        return next;
+      });
+    },
+    [],
+  );
 
   /**
-   * Called by a SenderCard when its bulk-trash job finishes (done or error).
+   * Called by a SenderCard when its bulk job finishes (done or error).
    * Advances the queue so the next card can begin its SSE stream.
    */
-  const handleBulkTrashJobDone = useCallback((_senderId: string) => {
-    setBulkTrashActiveIdx((prev) => prev + 1);
+  const handleBulkJobDone = useCallback((_senderId: string) => {
+    setBulkActiveIdx((prev) => prev + 1);
   }, []);
 
-  // Deselect a sender that has been individually actioned (trashed or blocked).
+  // Deselect a sender that has been individually actioned.
   const handleActioned = useCallback((id: string) => {
     setSelectedIds((prev) => {
       if (!prev.has(id)) return prev;
@@ -108,9 +114,9 @@ export function SenderList({ senders, dryRun }: Props) {
     });
   }, []);
 
-  // Record that a sender's emails have been permanently deleted.
-  const handleTrashed = useCallback((id: string) => {
-    setTrashedIds((prev) => new Set(prev).add(id));
+  // Record that a sender's emails have been actioned (moved to trash or permanently deleted).
+  const handleActionCompleted = useCallback((id: string) => {
+    setActionedIds((prev) => new Set(prev).add(id));
   }, []);
 
   // Only show senders that haven't been dismissed yet.
@@ -137,30 +143,35 @@ export function SenderList({ senders, dryRun }: Props) {
         selectedIds={Array.from(selectedIds)}
         totalCount={visibleSenders.length}
         dryRun={dryRun}
-        trashedIds={trashedIds}
+        actionedIds={actionedIds}
         onSelectAll={selectAll}
         onDeselectAll={deselectAll}
         onBulkComplete={handleBulkComplete}
-        onBulkTrashStarted={handleBulkTrashStarted}
+        onBulkActionStarted={handleBulkActionStarted}
       />
 
-      {visibleSenders.map((sender) => (
-        <SenderCard
-          key={sender.id}
-          sender={sender}
-          dryRun={dryRun}
-          selected={selectedIds.has(sender.id)}
-          onToggleSelect={toggle}
-          onDismiss={handleDismiss}
-          onActioned={handleActioned}
-          onTrashed={handleTrashed}
-          bulkTrashJobId={
-            activeBulkJob?.sender_id === sender.id ? activeBulkJob.job_id : null
-          }
-          isBulkTrashQueued={queuedSenderIds.has(sender.id)}
-          onBulkTrashJobDone={handleBulkTrashJobDone}
-        />
-      ))}
+      {visibleSenders.map((sender) => {
+        const isActive = activeBulkJob?.sender_id === sender.id;
+        const activeBulkDeleteJob: BulkDeleteJob | null = isActive
+          ? { jobId: activeBulkJob!.job_id, action: activeBulkJob!.action }
+          : null;
+
+        return (
+          <SenderCard
+            key={sender.id}
+            sender={sender}
+            dryRun={dryRun}
+            selected={selectedIds.has(sender.id)}
+            onToggleSelect={toggle}
+            onDismiss={handleDismiss}
+            onActioned={handleActioned}
+            onActionCompleted={handleActionCompleted}
+            bulkDeleteJob={activeBulkDeleteJob}
+            isBulkQueued={queuedSenderIds.has(sender.id)}
+            onBulkJobDone={handleBulkJobDone}
+          />
+        );
+      })}
     </div>
   );
 }
