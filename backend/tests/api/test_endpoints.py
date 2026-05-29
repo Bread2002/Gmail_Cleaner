@@ -37,9 +37,8 @@ class TestAuthLogin:
                 "https://accounts.google.com/o/oauth2/auth?fake",
                 "state123",
             )
-            # store_state reads these from flow.oauth2session; None keeps them JSON-serializable
-            instance.oauth2session._code_verifier = None
-            instance.oauth2session.code_challenge_method = None
+            # code_verifier is now generated manually in build_authorization_url and passed
+            # explicitly to store_state, so oauth2session internals are not accessed.
             MockFlow.from_client_config.return_value = instance
             r = await client.get("/auth/login")
 

@@ -6,6 +6,9 @@
 # Import necessary libraries and modules
 from __future__ import annotations
 
+import base64
+import hashlib
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -31,18 +34,27 @@ async def build_authorization_url() -> tuple[str, str]:
     )
 
     state = secrets.token_urlsafe(32)
+
+    # Generate PKCE verifier and challenge manually — library-version-agnostic.
+    # Google mandates PKCE for all new OAuth clients; requests_oauthlib behaviour
+    # varies across versions so we own the generation rather than relying on internals.
+    code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
     log.info("Building OAuth authorization URL (state=%s…)", state[:8])
     auth_url, _ = flow.authorization_url(
         access_type="offline",  # Request refresh_token
         include_granted_scopes="true",
         prompt="consent",  # Always show consent screen so refresh_token is returned
         state=state,
-        code_challenge_method="S256",  # Google now requires PKCE for all auth code flows
+        code_challenge=code_challenge,
+        code_challenge_method="S256",
     )
 
-    # Store a TTL-bound existence marker for this state in Redis; flow is rebuilt on retrieval
     expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
-    await store.session.store_state(state, flow, expiry)
+    await store.session.store_state(state, flow, expiry, code_verifier=code_verifier)
 
     return auth_url, state
 
