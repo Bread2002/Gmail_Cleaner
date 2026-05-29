@@ -37,6 +37,7 @@ async def build_authorization_url() -> tuple[str, str]:
         include_granted_scopes="true",
         prompt="consent",  # Always show consent screen so refresh_token is returned
         state=state,
+        code_challenge_method="S256",  # Google now requires PKCE for all auth code flows
     )
 
     # Store a TTL-bound existence marker for this state in Redis; flow is rebuilt on retrieval
