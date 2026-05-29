@@ -52,65 +52,83 @@ class TestEmailParsing:
 # Define a test class for the session storage
 class TestSessionStore:
     # Helper method to create a fresh session and return its token
-    def _fresh_token(self) -> str:
+    async def _fresh_token(self) -> str:
+        import json
+        from unittest.mock import MagicMock
         token = str(uuid.uuid4())
-        session_store.create_session(
+        creds = MagicMock()
+        creds.to_json.return_value = json.dumps({
+            "token": "t", "refresh_token": "r",
+            "client_id": "c", "client_secret": "s",
+            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
+            "expiry": "2099-12-31T23:59:59Z",
+        })
+        await session_store.create_session(
             token,
-            MagicMock(),
+            creds,
             "test@gmail.com",
             datetime.now(timezone.utc) + timedelta(hours=1),
         )
         return token
 
     # Test that a session can be created and then retrieved by its token, and that the retrieved session contains the correct user email
-    def test_create_and_retrieve_session(self):
-        token = self._fresh_token()
-        s = session_store.get_session(token)
+    async def test_create_and_retrieve_session(self):
+        token = await self._fresh_token()
+        s = await session_store.get_session(token)
         assert s is not None
         assert s["user_email"] == "test@gmail.com"
 
     # Test that a session with an expiration time in the past is treated as expired and get_session returns None for its token
-    def test_expired_session_returns_none(self):
+    async def test_expired_session_returns_none(self):
+        import json
+        from unittest.mock import MagicMock
         token = str(uuid.uuid4())
-        session_store.create_session(
+        creds = MagicMock()
+        creds.to_json.return_value = json.dumps({
+            "token": "t", "refresh_token": "r",
+            "client_id": "c", "client_secret": "s",
+            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
+            "expiry": "2099-12-31T23:59:59Z",
+        })
+        await session_store.create_session(
             token,
-            MagicMock(),
+            creds,
             "old@gmail.com",
             datetime.now(timezone.utc) - timedelta(seconds=1),
         )
-        assert session_store.get_session(token) is None
+        assert await session_store.get_session(token) is None
 
     # Test that a session that has been deleted from the store returns None when get_session is called with its token
-    def test_deleted_session_returns_none(self):
-        token = self._fresh_token()
-        session_store.delete_session(token)
-        assert session_store.get_session(token) is None
+    async def test_deleted_session_returns_none(self):
+        token = await self._fresh_token()
+        await session_store.delete_session(token)
+        assert await session_store.get_session(token) is None
 
     # Test that a scan result can be stored in the session storage with a specific token and scan_id, and that it can be retrieved correctly
-    def test_scan_result_stored_and_retrieved_by_key(self):
-        token = self._fresh_token()
+    async def test_scan_result_stored_and_retrieved_by_key(self):
+        token = await self._fresh_token()
         scan_id = str(uuid.uuid4())
         payload = {"scan_id": scan_id, "status": "complete", "senders": []}
         session_store.store_scan_result(token, scan_id, payload)
         assert session_store.get_scan_result(token, scan_id) == payload
 
     # Test that a queue created for a specific token is accessible via get_queue and that it returns the same queue object that was created
-    def test_queue_is_accessible_after_creation(self):
-        token = self._fresh_token()
+    async def test_queue_is_accessible_after_creation(self):
+        token = await self._fresh_token()
         q = session_store.create_queue(token, "q1")
         assert session_store.get_queue(token, "q1") is q
 
     # Test that a queue that has been deleted from the session storage returns None when get_queue is called with its token and queue name
-    def test_queue_returns_none_after_deletion(self):
-        token = self._fresh_token()
+    async def test_queue_returns_none_after_deletion(self):
+        token = await self._fresh_token()
         session_store.create_queue(token, "q1")
         session_store.delete_queue(token, "q1")
         assert session_store.get_queue(token, "q1") is None
 
     # Test that updating settings with a dictionary containing specific keys correctly updates those keys in the session's settings
-    def test_settings_update_overrides_given_keys_and_preserves_defaults(self):
-        token = self._fresh_token()
-        updated = session_store.update_settings(token, {"max_senders": 99})
+    async def test_settings_update_overrides_given_keys_and_preserves_defaults(self):
+        token = await self._fresh_token()
+        updated = await session_store.update_settings(token, {"max_senders": 99})
         assert updated["max_senders"] == 99
         assert "consecutive_unread_threshold" in updated  # Other defaults preserved
 

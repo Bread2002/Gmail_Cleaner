@@ -1,111 +1,175 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
-# Description: In-memory session store for the Gmail Cleaner backend.
-#              Designed for easy replacement with Redis in the future.
+# Last Updated: May 28th, 2026
+# Description: Redis-backed session store for the Gmail Cleaner backend.
+#              Durable session data (credentials, settings) lives in Redis.
+#              Process-local data (queues, scan results) stays in-memory.
 
-# Import necessary libraries and modules
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Any
 
+import redis.asyncio as aioredis
 from google.oauth2.credentials import Credentials
 
-# Define in-memory session storage structure
-_sessions: dict[str, dict[str, Any]] = {}
+from app.config import settings
 
-# Define temporary storage structure for pending OAuth flows (by state)
-_pending_states: dict[str, tuple[Any, datetime]] = {}
+# In-memory storage for process-local volatile data (queues and scan results).
+# These cannot be serialized to Redis and are only needed within a single process.
+_volatile: dict[str, dict[str, Any]] = {}
 
-# Define a helper function to create and store a new session for an authenticated user
-def create_session(
+# Redis client (initialized lazily via _get_redis)
+_redis: aioredis.Redis | None = None
+
+
+def _get_redis() -> aioredis.Redis:
+    global _redis
+    if _redis is None:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    return _redis
+
+
+def _session_key(token: str) -> str:
+    return f"session:{token}"
+
+
+def _state_key(state: str) -> str:
+    return f"state:{state}"
+
+
+async def create_session(
     session_token: str, credentials: Credentials, user_email: str, expires_at: datetime
 ) -> None:
-    _sessions[session_token] = {
-        "credentials": credentials,
+    data = {
+        "credentials_json": credentials.to_json(),
         "user_email": user_email,
-        "expires_at": expires_at,
-        # Per-session settings (mutable state)
+        "expires_at": expires_at.isoformat(),
         "settings": {
             "consecutive_unread_threshold": 20,
             "max_senders": 10,
             "max_messages_per_sender": 100,
             "dry_run_by_default": False,
         },
-        "scan_results": {},
-        "queues": {},
+    }
+    _volatile[session_token] = {"scan_results": {}, "queues": {}}
+    await _get_redis().set(
+        _session_key(session_token),
+        json.dumps(data),
+        ex=settings.session_ttl_seconds,
+    )
+
+
+async def get_session(session_token: str) -> dict[str, Any] | None:
+    raw = await _get_redis().get(_session_key(session_token))
+    if raw is None:
+        return None
+
+    data = json.loads(raw)
+    expires_at = datetime.fromisoformat(data["expires_at"])
+    if expires_at < datetime.now(timezone.utc):
+        await delete_session(session_token)
+        return None
+
+    volatile = _volatile.setdefault(session_token, {"scan_results": {}, "queues": {}})
+
+    return {
+        "_token": session_token,
+        "credentials": Credentials.from_authorized_user_info(json.loads(data["credentials_json"])),
+        "user_email": data["user_email"],
+        "expires_at": expires_at,
+        "settings": data["settings"],
+        "scan_results": volatile["scan_results"],
+        "queues": volatile["queues"],
     }
 
-# Define a helper function to retrieve the session for a given session token (returns None if missing/expired)
-def get_session(session_token: str) -> dict[str, Any] | None:
-    session = _sessions.get(session_token)
-    if session is None:
-        return None
-    if session["expires_at"] < datetime.now(timezone.utc):
-        delete_session(session_token)
-        return None
-    return session
 
-# Define a helper function to delete a session (e.g. logout or token expiry)
-def delete_session(session_token: str) -> None:
-    _sessions.pop(session_token, None)
+async def delete_session(session_token: str) -> None:
+    await _get_redis().delete(_session_key(session_token))
+    _volatile.pop(session_token, None)
 
-# Define a helper function to update the credentials for an existing session (e.g. token refresh)
-def update_credentials(session_token: str, credentials: Credentials) -> None:
-    session = _sessions.get(session_token)
-    if session:
-        session["credentials"] = credentials
 
-# Define helper functions to access the user settings for a session
-def get_settings(session_token: str) -> dict[str, Any]:
-    session = _sessions[session_token]
-    return session["settings"].copy()
+async def update_credentials(session_token: str, credentials: Credentials) -> None:
+    key = _session_key(session_token)
+    raw = await _get_redis().get(key)
+    if raw is None:
+        return
+    data = json.loads(raw)
+    data["credentials_json"] = credentials.to_json()
+    await _get_redis().set(key, json.dumps(data), keepttl=True)
 
-# Define a helper function to update user settings for a session
-def update_settings(session_token: str, patch: dict[str, Any]) -> dict[str, Any]:
-    session = _sessions[session_token]
-    session["settings"].update(patch)
-    return session["settings"].copy()
 
-# Define a helper function to retrieve scan results for a session
+async def get_settings(session_token: str) -> dict[str, Any]:
+    raw = await _get_redis().get(_session_key(session_token))
+    if raw is None:
+        return {}
+    return json.loads(raw)["settings"].copy()
+
+
+async def update_settings(session_token: str, patch: dict[str, Any]) -> dict[str, Any]:
+    key = _session_key(session_token)
+    raw = await _get_redis().get(key)
+    if raw is None:
+        return {}
+    data = json.loads(raw)
+    data["settings"].update(patch)
+    await _get_redis().set(key, json.dumps(data), keepttl=True)
+    return data["settings"].copy()
+
+
+# Scan results — in-memory (process-local, ephemeral)
+
 def get_scan_result(session_token: str, scan_id: str) -> dict[str, Any] | None:
-    return _sessions[session_token]["scan_results"].get(scan_id)
+    volatile = _volatile.get(session_token)
+    if volatile is None:
+        return None
+    return volatile["scan_results"].get(scan_id)
 
-# Define a helper functions to store scan results for a session
+
 def store_scan_result(session_token: str, scan_id: str, result: dict[str, Any]) -> None:
-    _sessions[session_token]["scan_results"][scan_id] = result
+    _volatile.setdefault(session_token, {"scan_results": {}, "queues": {}})["scan_results"][scan_id] = result
 
-# Define a helper function to create a new queue for a session (e.g. for streaming scan results)
+
+# Queues — in-memory (asyncio.Queue objects, process-local)
+
 def create_queue(session_token: str, queue_id: str) -> asyncio.Queue:
     q: asyncio.Queue = asyncio.Queue()
-    _sessions[session_token]["queues"][queue_id] = q
+    _volatile.setdefault(session_token, {"scan_results": {}, "queues": {}})["queues"][queue_id] = q
     return q
 
-# Define a helper function to retrieve a queue for a session
+
 def get_queue(session_token: str, queue_id: str) -> asyncio.Queue | None:
-    session = _sessions.get(session_token)
-    if session is None:
+    volatile = _volatile.get(session_token)
+    if volatile is None:
         return None
-    return session["queues"].get(queue_id)
+    return volatile["queues"].get(queue_id)
 
-# Define a helper function to delete a queue for a session (e.g. when streaming is done)
+
 def delete_queue(session_token: str, queue_id: str) -> None:
-    session = _sessions.get(session_token)
-    if session:
-        session["queues"].pop(queue_id, None)
+    volatile = _volatile.get(session_token)
+    if volatile:
+        volatile["queues"].pop(queue_id, None)
 
-# Define a helper function to store a pending OAuth flow
-def store_state(state: str, flow: Any, expiry: datetime) -> None:
-    _pending_states[state] = (flow, expiry)
 
-# Define a helper function to retrieve and remove a pending OAuth flow (returns None if missing/expired)
-def pop_state(state: str) -> Any | None:
-    entry = _pending_states.pop(state, None)
-    if entry is None:
+# OAuth pending state — Redis with TTL (flow is rebuilt from settings on retrieval)
+
+async def store_state(state: str, flow: Any, expiry: datetime) -> None:
+    ttl = int((expiry - datetime.now(timezone.utc)).total_seconds())
+    if ttl > 0:
+        await _get_redis().set(_state_key(state), "1", ex=ttl)
+
+
+async def pop_state(state: str) -> Any | None:
+    deleted = await _get_redis().delete(_state_key(state))
+    if deleted == 0:
         return None
-    flow, expiry = entry
-    if expiry < datetime.now(timezone.utc):
-        return None
-    return flow
+    # Reconstruct the Flow from current settings — no flow-internal state is required for fetch_token
+    from google_auth_oauthlib.flow import Flow
+    from app.config import settings as app_settings
+    return Flow.from_client_config(
+        app_settings.google_auth_config,
+        scopes=app_settings.gmail_scopes,
+        redirect_uri=app_settings.google_redirect_uri,
+    )

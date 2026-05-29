@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
     "python-dotenv>=1.0.0",
+    "redis[asyncio]>=5.0.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "pytest-spec>=3.2.0",   # Renders test names as human-readable spec lines
+    "fakeredis>=2.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]

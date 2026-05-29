@@ -1,6 +1,6 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
+# Last Updated: May 28th, 2026
 # Description: Defines API endpoints for authentication operations (login, callback, logout, and get current user) using Google OAuth and session management.
 
 # Import necessary libraries and modules
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.get("/login", response_model=LoginResponse)
 async def login() -> LoginResponse:
     """Initiate the OAuth login flow by generating the Google authorization URL (no authentication required)."""
-    auth_url, _ = gmail_auth.build_authorization_url()
+    auth_url, _ = await gmail_auth.build_authorization_url()
     return LoginResponse(auth_url=auth_url)
 
 
@@ -34,7 +34,7 @@ async def login() -> LoginResponse:
 async def callback(body: CallbackRequest) -> CallbackResponse:
     """Handle the OAuth callback from Google, exchange the authorization code for tokens, create a server-side session, and return session details (no authentication required)."""
     try:
-        credentials = gmail_auth.exchange_code(code=body.code, state=body.state)
+        credentials = await gmail_auth.exchange_code(code=body.code, state=body.state)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -53,7 +53,7 @@ async def callback(body: CallbackRequest) -> CallbackResponse:
     expires_at = datetime.now(timezone.utc) + timedelta(
         seconds=settings.session_ttl_seconds
     )
-    store.session.create_session(session_token, credentials, user_email, expires_at)
+    await store.session.create_session(session_token, credentials, user_email, expires_at)
 
     return CallbackResponse(
         session_token=session_token,
@@ -68,7 +68,6 @@ async def logout(
     session: Annotated[dict, Depends(get_session_from_header)],
 ) -> None:
     """Log out the user by revoking the Google token and deleting the server-side session (requires a valid session token)."""
-    # Extract the token from the Authorization header (if present) for logging purposes
     credentials = session.get("credentials")
     if credentials and credentials.token:
         try:
@@ -80,16 +79,7 @@ async def logout(
         except Exception:
             pass  # Best-effort revocation
 
-    # Find and delete the session by credentials identity
-    from app.store.session import _sessions
-
-    token_to_delete = None
-    for tok, sess in list(_sessions.items()):
-        if sess.get("credentials") is credentials:
-            token_to_delete = tok
-            break
-    if token_to_delete:
-        store.session.delete_session(token_to_delete)
+    await store.session.delete_session(session["_token"])
 
 
 # Define the GET endpoint to return the authenticated user's email and authentication status (requires a valid session token)

@@ -1,6 +1,6 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
+# Last Updated: May 28th, 2026
 # Description: Defines API endpoints for user settings management (get and update settings) with authentication via session tokens.
 
 # Import necessary libraries and modules
@@ -18,14 +18,9 @@ from app import store
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-# Define a helper function to retrieve the session token associated with a given session dictionary (used for logging and session management)
+# Define a helper function to retrieve the session token from the session dictionary
 def _get_session_token(session: dict) -> str:
-    from app.store.session import _sessions
-
-    token = next((t for t, s in _sessions.items() if s is session), None)
-    if not token:
-        raise HTTPException(status_code=500, detail="Session lookup failed")
-    return token
+    return session["_token"]
 
 
 # Define the GET endpoint to retrieve the current user's settings (requires authentication via session token)
@@ -35,7 +30,7 @@ async def get_settings(
 ) -> UserSettings:
     """Retrieve the current user's settings (requires authentication via session token)."""
     session_token = _get_session_token(session)
-    raw = store.session.get_settings(session_token)
+    raw = await store.session.get_settings(session_token)
     return UserSettings(**raw)
 
 
@@ -49,5 +44,5 @@ async def patch_settings(
     session_token = _get_session_token(session)
     # Only apply fields that were explicitly provided (not None)
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
-    updated = store.session.update_settings(session_token, patch)
+    updated = await store.session.update_settings(session_token, patch)
     return UserSettings(**updated)

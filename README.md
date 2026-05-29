@@ -12,7 +12,7 @@ A local-first inbox management tool built with **React TS + FastAPI**, authentic
 
 ## ⚙️ Features
 
-- 🔐 **Google OAuth 2.0** — Sign in with your Google account; tokens are stored server-side in memory and expire after 1 hour
+- 🔐 **Google OAuth 2.0** — Sign in with your Google account; tokens are stored server-side in Redis and expire after 1 hour
 - 📬 **Inbox Scanner** — Identifies senders with N+ consecutive unread emails via the Gmail API; real-time progress streamed over SSE
 - 🗑️ **Bulk Trash** — Move every message from flagged senders to trash in batches; live deletion progress per sender
 - 🚫 **Sender Blocking** — Creates permanent Gmail filters that auto-trash future emails from blocked senders
@@ -42,7 +42,7 @@ Gmail_Cleaner/
 │       │   ├── gmail_scan.py       # Consecutive-unread detection
 │       │   ├── gmail_trash.py      # Batch message deletion
 │       │   └── gmail_filter.py     # Gmail filter creation (blocking)
-│       ├── store/                  # In-memory session + job queue store
+│       ├── store/                  # Redis-backed session store (queues/scan results stay in-memory)
 │       └── tests/                  # Pytest suites
 │           ├── api/                # API-related unit tests
 │           ├── services/           # Service-related unit tests
@@ -70,6 +70,7 @@ Gmail_Cleaner/
 - Python 3.11+
 - Node.js 24+
 - A [Google Cloud](https://console.cloud.google.com) project
+- A Redis instance (local or hosted, e.g. Upstash, Redis Cloud)
 
 ---
 
@@ -117,6 +118,7 @@ Gmail_Cleaner/
    GOOGLE_PROJECT_ID=your-project-id
    GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
    FRONTEND_ORIGIN=http://localhost:5173
+   REDIS_URL=redis://localhost:6379
    ```
 
 3. Start the server:

@@ -1,6 +1,6 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
+# Last Updated: May 28th, 2026
 # Description: Implements the authentication service using Google OAuth 2.0.
 
 # Import necessary libraries and modules
@@ -23,7 +23,7 @@ log = logging.getLogger("gmail_cleaner.auth")
 
 
 # Define a helper function to build the Google OAuth authorization URL and generate an OAuth flow
-def build_authorization_url() -> tuple[str, str]:
+async def build_authorization_url() -> tuple[str, str]:
     flow = Flow.from_client_config(
         settings.google_auth_config,
         scopes=settings.gmail_scopes,
@@ -39,17 +39,17 @@ def build_authorization_url() -> tuple[str, str]:
         state=state,
     )
 
-    # Store the Flow object keyed by state
+    # Store a TTL-bound existence marker for this state in Redis; flow is rebuilt on retrieval
     expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
-    store.session.store_state(state, flow, expiry)
+    await store.session.store_state(state, flow, expiry)
 
     return auth_url, state
 
 
 # Define a helper function to exchange an authorization code for tokens and return a Credentials object
-def exchange_code(code: str, state: str) -> Credentials:
+async def exchange_code(code: str, state: str) -> Credentials:
     log.info("Exchanging OAuth code for tokens (state=%s…)", state[:8])
-    flow: Flow | None = store.session.pop_state(state)
+    flow: Flow | None = await store.session.pop_state(state)
     if flow is None:
         log.warning("OAuth state not found or expired: %s…", state[:8])
         raise ValueError("Invalid or expired OAuth state parameter")

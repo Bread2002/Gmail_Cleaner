@@ -67,9 +67,17 @@ class TestAuthMe:
 
     # Test that the GET endpoint returns a 401 status code for an expired session
     async def test_returns_401_for_expired_session(self, client):
+        import json
         token = str(uuid.uuid4())
         expired_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-        session_store.create_session(token, MagicMock(), "old@gmail.com", expired_at)
+        creds = MagicMock()
+        creds.to_json.return_value = json.dumps({
+            "token": "t", "refresh_token": "r",
+            "client_id": "c", "client_secret": "s",
+            "token_uri": "https://oauth2.googleapis.com/token", "scopes": [],
+            "expiry": "2099-12-31T23:59:59Z",
+        })
+        await session_store.create_session(token, creds, "old@gmail.com", expired_at)
 
         r = await client.get("/auth/me", headers=_auth(token))
         assert r.status_code == 401

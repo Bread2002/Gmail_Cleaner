@@ -1,15 +1,17 @@
 # Copyright (c) 2026, Rye Stahle-Smith; All rights reserved.
 # Gmail Cleaner
-# Last Updated: May 24th, 2026
+# Last Updated: May 28th, 2026
 # Description: Sets required environment variables for tests before any app modules are imported and defines pytest fixtures for use in tests
 #              Tests use httpx + FastAPI's test client (no real Gmail or Google OAuth calls).
 # Note: You must run the following command within the Python virtual environment to install development dependencies:
 #       pip install -e ".[dev]"
 
 # Import necessary libraries and modules
+import json
 import os
 import uuid
 
+import fakeredis
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -25,23 +27,41 @@ os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("GOOGLE_PROJECT_ID", "test-project-id")
 
 
-# Define a pytest fixture to clean the session storage before and after each test (ensures test isolation)
+# Define a helper to build a mock Credentials object whose to_json() returns valid JSON
+def _mock_credentials() -> MagicMock:
+    creds = MagicMock()
+    creds.to_json.return_value = json.dumps({
+        "token": "test-access-token",
+        "refresh_token": "test-refresh-token",
+        "client_id": "test-client-id",
+        "client_secret": "test-client-secret",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "scopes": [],
+        "expiry": "2099-12-31T23:59:59Z",
+    })
+    creds.expired = False
+    creds.token = "test-access-token"
+    creds.refresh_token = "test-refresh-token"
+    return creds
+
+
+# Define a pytest fixture to inject a fresh fakeredis instance and clear volatile state before/after each test
 @pytest.fixture(autouse=True)
-def clean_sessions():
-    session_store._sessions.clear()
-    session_store._pending_states.clear()
+async def clean_sessions():
+    session_store._redis = fakeredis.FakeAsyncRedis()
+    session_store._volatile.clear()
     yield
-    session_store._sessions.clear()
-    session_store._pending_states.clear()
+    session_store._volatile.clear()
+    session_store._redis = None
 
 
 # Define a pytest fixture to provide a valid session token (for tests that require authentication)
 @pytest.fixture
-def session_token():
+async def session_token():
     token = str(uuid.uuid4())
-    session_store.create_session(
+    await session_store.create_session(
         token,
-        MagicMock(),
+        _mock_credentials(),
         "test@gmail.com",
         datetime.now(timezone.utc) + timedelta(hours=1),
     )
@@ -50,11 +70,11 @@ def session_token():
 
 # Define a pytest fixture that sets up a session with one flagged sender (for tests that need pre-seeded sender data)
 @pytest.fixture
-def session_with_sender():
+async def session_with_sender():
     token = str(uuid.uuid4())
-    session_store.create_session(
+    await session_store.create_session(
         token,
-        MagicMock(),
+        _mock_credentials(),
         "test@gmail.com",
         datetime.now(timezone.utc) + timedelta(hours=1),
     )

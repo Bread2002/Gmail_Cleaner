@@ -31,14 +31,9 @@ router = APIRouter(prefix="/scan", tags=["scan"])
 log = logging.getLogger("gmail_cleaner.routers.scan")
 
 
-# Define a helper function to retrieve the session token associated with a given session dictionary (used for logging and session management)
+# Define a helper function to retrieve the session token from the session dictionary
 def _get_session_token(session: dict) -> str:
-    from app.store.session import _sessions
-
-    token = next((t for t, s in _sessions.items() if s is session), None)
-    if not token:
-        raise HTTPException(status_code=500, detail="Session lookup failed")
-    return token
+    return session["_token"]
 
 
 # Define the POST endpoint to start a new email scan (requires authentication via session token)

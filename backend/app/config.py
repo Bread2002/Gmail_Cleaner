@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # Configure session management
     session_ttl_seconds: int = 3600
+    redis_url: str = "redis://localhost:6379"
 
     # Configure Gmail OAuth scopes
     gmail_scopes: List[str] = [
