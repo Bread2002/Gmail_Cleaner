@@ -54,8 +54,14 @@ async def exchange_code(code: str, state: str) -> Credentials:
         log.warning("OAuth state not found or expired: %s…", state[:8])
         raise ValueError("Invalid or expired OAuth state parameter")
 
-    # Exchange code for tokens
-    flow.fetch_token(code=code)
+    # Exchange code for tokens, passing code_verifier explicitly so the PKCE
+    # round-trip works regardless of the requests_oauthlib version on the server.
+    code_verifier = getattr(flow, "_stored_code_verifier", None)
+    if code_verifier:
+        log.debug("PKCE code_verifier present — passing explicitly to fetch_token")
+        flow.fetch_token(code=code, code_verifier=code_verifier)
+    else:
+        flow.fetch_token(code=code)
     log.info("OAuth token exchange successful")
     return flow.credentials
 

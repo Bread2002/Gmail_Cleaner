@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,8 @@ import redis.asyncio as aioredis
 from google.oauth2.credentials import Credentials
 
 from app.config import settings
+
+log = logging.getLogger("gmail_cleaner.session")
 
 # In-memory storage for process-local volatile data (queues and scan results).
 # These cannot be serialized to Redis and are only needed within a single process.
@@ -162,8 +165,10 @@ async def store_state(state: str, flow: Any, expiry: datetime) -> None:
     if ttl <= 0:
         return
     oauth_session = flow.oauth2session
+    code_verifier = getattr(oauth_session, "_code_verifier", None)
+    log.debug("store_state: code_verifier present=%s", code_verifier is not None)
     value = json.dumps({
-        "code_verifier": getattr(oauth_session, "_code_verifier", None),
+        "code_verifier": code_verifier,
         "code_challenge_method": getattr(oauth_session, "code_challenge_method", None),
     })
     await _get_redis().set(_state_key(state), value, ex=ttl)
@@ -184,9 +189,13 @@ async def pop_state(state: str) -> Any | None:
         scopes=app_settings.gmail_scopes,
         redirect_uri=app_settings.google_redirect_uri,
     )
-    # Restore PKCE state so fetch_token sends the correct code_verifier
-    if data.get("code_verifier"):
-        flow.oauth2session._code_verifier = data["code_verifier"]
+    # Restore PKCE state — set the internal attribute AND expose it as a top-level
+    # attribute so callers can pass it explicitly to fetch_token (some versions of
+    # requests_oauthlib do not read _code_verifier automatically during token exchange).
+    code_verifier = data.get("code_verifier")
+    if code_verifier:
+        flow.oauth2session._code_verifier = code_verifier
+        flow._stored_code_verifier = code_verifier
     if data.get("code_challenge_method"):
         flow.oauth2session.code_challenge_method = data["code_challenge_method"]
     return flow
