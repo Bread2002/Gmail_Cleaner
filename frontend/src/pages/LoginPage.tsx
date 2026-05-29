@@ -21,17 +21,17 @@ export function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl p-10 w-full max-w-md text-center space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-6">
+      <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-10 w-full max-w-md text-center space-y-6">
         {/* Logo */}
         <div className="flex flex-col items-center gap-2">
           <img
             src="/logo.png"
             alt="Gmail Cleaner"
-            className="h-60 w-60 rounded-2xl object-contain shadow-md"
+            className="h-32 w-32 sm:h-60 sm:w-60 rounded-2xl object-contain shadow-md"
           />
-          <h1 className="text-3xl font-bold text-gray-900">Gmail Cleaner</h1>
-          <p className="text-gray-500 font-bold text-sm whitespace-nowrap">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gmail Cleaner</h1>
+          <p className="text-gray-500 font-bold text-sm">
             Automatically find and remove unwanted email senders
           </p>
         </div>
@@ -44,7 +44,7 @@ export function LoginPage() {
         )}
 
         {/* Features */}
-        <ul className="text-left text-sm whitespace-nowrap text-gray-600 space-y-2">
+        <ul className="text-left text-sm text-gray-600 space-y-2">
           {[
             "🔍 Scan for senders with excessive unread emails",
             "🗑️ Batch-trash all emails from a sender",

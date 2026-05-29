@@ -19,7 +19,7 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-gray-200 bg-white px-6 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+    <header className="border-b border-gray-200 bg-white px-3 sm:px-6 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm">
       <Link to="/" className="flex items-center gap-2.5 no-underline">
         <img
           src="/logo.png"
@@ -31,7 +31,7 @@ export function Header() {
         </span>
       </Link>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         {/* <Link
           to="/settings"
           className="text-sm text-gray-500 hover:text-gray-900 transition-colors no-underline"
@@ -47,7 +47,8 @@ export function Header() {
           onClick={() => navigate("/settings")}
           className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md transition-colors"
         >
-          ⚙️ Settings
+          <span className="sm:hidden">⚙️</span>
+          <span className="hidden sm:inline">⚙️ Settings</span>
         </button>
         <button
           onClick={handleLogout}

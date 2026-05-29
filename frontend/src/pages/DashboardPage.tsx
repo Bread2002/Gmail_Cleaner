@@ -33,7 +33,7 @@ export function DashboardPage() {
         <h1 className="text-3xl font-bold text-gray-900">
           Cleanse Your Inbox...
         </h1>
-        <p className="text-gray-500 text-sm whitespace-nowrap">
+        <p className="text-gray-500 text-sm">
           Finds senders with{" "}
           <strong>{settings.consecutive_unread_threshold}+</strong> consecutive
           unread emails and lets you trash, delete, or block them.
