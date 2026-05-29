@@ -105,6 +105,7 @@ async def run_scan(
     dry_run: bool,
     consecutive_unread_threshold: int,
     max_senders: int,
+    max_messages_per_sender: int,
     store_result_fn: Any,
 ) -> None:
     loop = asyncio.get_running_loop()
