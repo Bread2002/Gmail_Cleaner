@@ -72,7 +72,7 @@ Gmail_Cleaner/
 - Python 3.11+
 - Node.js 24+
 - A [Google Cloud](https://console.cloud.google.com) project
-- A Redis instance — required in production; **optional for local development** (see [Running without Redis](#running-without-redis) below)
+- A Redis instance — required in production; **optional for local development**
 
 ---
 
