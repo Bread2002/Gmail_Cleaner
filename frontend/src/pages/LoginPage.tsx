@@ -48,7 +48,7 @@ export function LoginPage() {
           {[
             "🔍 Scan for senders with excessive unread emails",
             "🗑️ Batch-trash all emails from a sender",
-            "✕  Permanently delete all messages from a sender",
+            "✖️ Permanently delete all messages from a sender",
             "🚫 Block unwanted/ spam senders",
             "🧪 Dry-run mode to preview before deleting",
           ].map((feature) => (

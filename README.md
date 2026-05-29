@@ -15,7 +15,7 @@ A local-first inbox management tool built with **React TS + FastAPI**, authentic
 - 🔐 **Google OAuth 2.0** — Sign in with your Google account; tokens are stored server-side and expire after 1 hour
 - 📬 **Inbox Scanner** — Identifies senders with N+ consecutive unread emails via the Gmail API; real-time progress streamed over SSE
 - 🗑️ **Move to Trash** — Move every message from a flagged sender to Gmail Trash (recoverable for 30 days); single-click per sender or bulk
-- ✕ **Delete Forever** — Permanently delete all messages from a sender via Gmail's `batchDelete` API; requires a two-click confirmation to prevent accidents
+- ✖️ **Delete Forever** — Permanently delete all messages from a sender via Gmail's `batchDelete` API; requires a two-click confirmation to prevent accidents
 - 🚫 **Sender Blocking** — Creates permanent Gmail filters that auto-trash future emails from blocked senders
 - 🧪 **Dry Run Mode** — Preview exactly what would be moved or deleted without making any changes
 - ⚙️ **Configurable Settings** — Tune the consecutive-unread threshold, max senders to surface, and messages per sender to inspect
