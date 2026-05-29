@@ -102,7 +102,7 @@ export function SenderCard({
     if (bulkDeleteJob && bulkDeleteJob.jobId !== prevBulkJobIdRef.current) {
       prevBulkJobIdRef.current = bulkDeleteJob.jobId;
       const endpoint =
-        bulkDeleteJob.action === "moveToTrash" ? "move-to-trash" : "trash";
+        bulkDeleteJob.action === "moveToTrash" ? "move-to-trash" : "delete";
       startFromJobId(bulkDeleteJob.jobId, endpoint, bulkDeleteJob.action);
     }
   }, [bulkDeleteJob, startFromJobId]);

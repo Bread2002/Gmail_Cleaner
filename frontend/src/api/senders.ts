@@ -33,7 +33,7 @@ export const sendersApi = {
   // Method to permanently delete all emails from a specific sender (irreversible)
   deleteForever: (senderId: string, dryRun = false) =>
     apiClient
-      .post<TrashStartResponse>(`/senders/${senderId}/trash`, {
+      .post<TrashStartResponse>(`/senders/${senderId}/delete`, {
         dry_run: dryRun,
       })
       .then((r) => r.data),
@@ -56,7 +56,7 @@ export const sendersApi = {
   // Method to permanently delete multiple senders' emails at once (irreversible)
   bulkDeleteForever: (senderIds: string[], dryRun = false) =>
     apiClient
-      .post<BulkDeleteResponse>("/senders/bulk/trash", {
+      .post<BulkDeleteResponse>("/senders/bulk/delete", {
         sender_ids: senderIds,
         dry_run: dryRun,
       })

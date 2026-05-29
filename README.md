@@ -225,7 +225,7 @@ pytest tests/services/test_services.py::TestSessionStore::test_create_and_retrie
 | `GET`   | `/scan/{id}/results`          | Polling fallback for completed scan results                            |
 | `GET`   | `/senders/{id}/preview`       | Returns subject, snippet, and date of a sender's latest email          |
 | `POST`  | `/senders/{id}/move-to-trash` | Moves all messages from a sender to Gmail Trash (recoverable, 30 days) |
-| `POST`  | `/senders/{id}/trash`         | Permanently deletes all messages from a sender (irreversible)          |
+| `POST`  | `/senders/{id}/delete`        | Permanently deletes all messages from a sender (irreversible)          |
 | `POST`  | `/senders/{id}/block`         | Creates a Gmail filter to auto-trash future emails from a sender       |
 | `POST`  | `/senders/bulk/move-to-trash` | Starts move-to-trash jobs for multiple senders; returns `job_id`s      |
 | `POST`  | `/senders/bulk/delete`        | Permanently deletes messages for multiple senders; returns `job_id`s   |
@@ -242,4 +242,4 @@ Long-lived connections where the backend streams progress events to the client i
 | ------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/scan/{id}/stream`                           | Real-time scan progress; fires `sender_found` events as senders are flagged, then `done` when complete                                                            |
 | `GET`  | `/senders/{id}/move-to-trash/{job_id}/stream` | Progress for a move-to-trash job; used for both individual and bulk — the bulk REST endpoint returns multiple `job_id`s and the frontend opens one stream per job |
-| `GET`  | `/senders/{id}/trash/{job_id}/stream`         | Progress for a permanent deletion job; same streaming pattern as move-to-trash                                                                                    |
+| `GET`  | `/senders/{id}/delete/{job_id}/stream`        | Progress for a permanent deletion job; same streaming pattern as move-to-trash                                                                                    |

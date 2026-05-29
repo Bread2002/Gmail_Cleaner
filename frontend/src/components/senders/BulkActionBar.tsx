@@ -72,10 +72,12 @@ export function BulkActionBar({
     try {
       const { jobs } = await sendersApi.bulkMoveToTrash(ids, dryRun);
       if (dryRun) {
-        setStatus(`🧪 Would move emails from ${jobs.length} sender(s) to Trash`);
+        setStatus(
+          `🧪 Would move emails from ${jobs.length} sender(s) to the trash`,
+        );
         onBulkComplete(jobs.map((j) => j.sender_id));
       } else {
-        setStatus(`🗑️ Moving ${jobs.length} sender(s) to Trash…`);
+        setStatus(`🗑️ Moving ${jobs.length} sender(s) to the trash…`);
         onBulkActionStarted(jobs, "moveToTrash");
       }
     } catch (e: any) {
@@ -93,7 +95,9 @@ export function BulkActionBar({
       setStatus(null);
       try {
         const { jobs } = await sendersApi.bulkDeleteForever(ids, dryRun);
-        setStatus(`🧪 Would permanently delete emails from ${jobs.length} sender(s)`);
+        setStatus(
+          `🧪 Would permanently delete emails from ${jobs.length} sender(s)`,
+        );
         onBulkComplete(jobs.map((j) => j.sender_id));
       } catch (e: any) {
         setStatus(`❌ ${e.message}`);

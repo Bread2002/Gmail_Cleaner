@@ -19,7 +19,13 @@ interface Props {
 }
 
 // Define the DeletionProgress component that displays operation progress based on the current phase and action type
-export function DeletionProgress({ phase, action, progress, result, dryRun }: Props) {
+export function DeletionProgress({
+  phase,
+  action,
+  progress,
+  result,
+  dryRun,
+}: Props) {
   if (phase === "idle") return null;
 
   if (phase === "done" && result) {
@@ -28,13 +34,13 @@ export function DeletionProgress({ phase, action, progress, result, dryRun }: Pr
     if (dryRun) {
       message =
         action === "moveToTrash"
-          ? `🧪 Would move ${count}+ emails to Trash`
+          ? `🧪 Would move ${count}+ emails to the trash…`
           : `🧪 Would permanently delete ${count}+ emails`;
     } else {
       message =
         action === "moveToTrash"
-          ? `✅ Moved ${count}+ emails to Trash`
-          : `✅ Permanently deleted ${count}+ emails`;
+          ? `✅ Moved ${count}+ emails to the trash…`
+          : `✅ Permanently deleted ${count}+ emails…`;
     }
 
     return (

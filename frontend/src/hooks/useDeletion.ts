@@ -49,12 +49,22 @@ export function useDeletion(senderId: string) {
       sseRef.current = createSSE(url, {
         onMessage: (type, data: any) => {
           if (type === "progress") {
-            setState((s) => ({ ...s, progress: data as TrashProgressEvent }));
+            // Normalize: delete service emits 'deleted', move-to-trash emits 'trashed'
+            const progress: TrashProgressEvent = {
+              ...data,
+              trashed: data.trashed ?? data.deleted ?? 0,
+            };
+            setState((s) => ({ ...s, progress }));
           } else if (type === "complete") {
+            // Normalize: delete service emits 'deleted_count', move-to-trash emits 'trashed_count'
+            const result: TrashCompleteEvent = {
+              ...data,
+              trashed_count: data.trashed_count ?? data.deleted_count ?? 0,
+            };
             setState((s) => ({
               ...s,
               phase: "done",
-              result: data as TrashCompleteEvent,
+              result,
             }));
           } else if (type === "error") {
             setState((s) => ({
@@ -109,7 +119,7 @@ export function useDeletion(senderId: string) {
       try {
         const { job_id } = await sendersApi.deleteForever(senderId, dryRun);
         setState((s) => ({ ...s, phase: "deleting", jobId: job_id }));
-        _openSSE(job_id, "trash");
+        _openSSE(job_id, "delete");
       } catch (e: any) {
         setState((s) => ({
           ...s,
