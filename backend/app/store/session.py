@@ -153,23 +153,40 @@ def delete_queue(session_token: str, queue_id: str) -> None:
         volatile["queues"].pop(queue_id, None)
 
 
-# OAuth pending state — Redis with TTL (flow is rebuilt from settings on retrieval)
+# OAuth pending state — Redis with TTL
+# The PKCE code_verifier (if used) is stored alongside the state so it can be
+# restored when the flow is reconstructed during the callback.
 
 async def store_state(state: str, flow: Any, expiry: datetime) -> None:
     ttl = int((expiry - datetime.now(timezone.utc)).total_seconds())
-    if ttl > 0:
-        await _get_redis().set(_state_key(state), "1", ex=ttl)
+    if ttl <= 0:
+        return
+    oauth_session = flow.oauth2session
+    value = json.dumps({
+        "code_verifier": getattr(oauth_session, "_code_verifier", None),
+        "code_challenge_method": getattr(oauth_session, "code_challenge_method", None),
+    })
+    await _get_redis().set(_state_key(state), value, ex=ttl)
 
 
 async def pop_state(state: str) -> Any | None:
-    deleted = await _get_redis().delete(_state_key(state))
-    if deleted == 0:
+    raw = await _get_redis().get(_state_key(state))
+    if raw is None:
         return None
-    # Reconstruct the Flow from current settings — no flow-internal state is required for fetch_token
+    await _get_redis().delete(_state_key(state))
+
+    data = json.loads(raw)
+
     from google_auth_oauthlib.flow import Flow
     from app.config import settings as app_settings
-    return Flow.from_client_config(
+    flow = Flow.from_client_config(
         app_settings.google_auth_config,
         scopes=app_settings.gmail_scopes,
         redirect_uri=app_settings.google_redirect_uri,
     )
+    # Restore PKCE state so fetch_token sends the correct code_verifier
+    if data.get("code_verifier"):
+        flow.oauth2session._code_verifier = data["code_verifier"]
+    if data.get("code_challenge_method"):
+        flow.oauth2session.code_challenge_method = data["code_challenge_method"]
+    return flow
