@@ -88,7 +88,7 @@ export function useScan() {
                 if (p.total_unread != null) {
                   // Final count after listing completes
                   appendLog(
-                    `Found ${p.total_unread.toLocaleString()} unread messages — analysing senders…`,
+                    `Analyzing ${p.total_unread.toLocaleString()} unread messages…`,
                   );
                 } else if (p.message) {
                   // First event: confirms SSE is working and scan has started

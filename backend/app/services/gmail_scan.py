@@ -186,7 +186,7 @@ async def run_scan(
                     "progress",
                     {
                         "phase": "listing_unread",
-                        "message": f"Capped at {MAX_MESSAGES:,} messages. Analyzing senders…",
+                        "message": f"Capped at {MAX_MESSAGES:,} messages…",
                     },
                 )
                 break
@@ -210,7 +210,7 @@ async def run_scan(
             {
                 "phase": "listing_unread",
                 "total_unread": total_unread,
-                "message": f"Found {total_unread:,} unread messages. Analyzing senders…",
+                "message": f"Analyzing {total_unread:,} unread messages…",
             },
         )
 
