@@ -6,6 +6,7 @@
 // Import necessary modules and components
 import { Outlet } from "react-router-dom";
 import { Header } from "./Header";
+import { Footer } from "./Footer";
 
 // Define the AppShell component that serves as the main layout for the application, including the header and outlet for nested routes
 export function AppShell() {
@@ -15,6 +16,7 @@ export function AppShell() {
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
         <Outlet />
       </main>
+      <Footer />
     </div>
   );
 }

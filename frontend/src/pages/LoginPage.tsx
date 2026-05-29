@@ -8,6 +8,7 @@
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { Footer } from "../components/layout/Footer";
 
 // Define the LoginPage component that renders the login interface for the Gmail Cleaner application
 export function LoginPage() {
@@ -21,7 +22,8 @@ export function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      <div className="flex-1 flex items-center justify-center px-4 py-6">
       <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-10 w-full max-w-md text-center space-y-6">
         {/* Logo */}
         <div className="flex flex-col items-center gap-2">
@@ -88,6 +90,8 @@ export function LoginPage() {
           Only accesses your Gmail. No data is stored permanently.
         </p>
       </div>
+      </div>
+      <Footer />
     </div>
   );
 }
