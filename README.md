@@ -6,17 +6,18 @@
 
 ## 📌 Overview
 
-A local-first inbox management tool built with **React TS + FastAPI**, authenticated through **Google OAuth 2.0**. Sign in with your Google account, kick off a scan, and surface the senders flooding your inbox with unread emails. From there you can bulk-trash all their messages or create Gmail filters to block them permanently — with real-time SSE progress on every action.
+A local-first inbox management tool built with **React TS + FastAPI**, authenticated through **Google OAuth 2.0**. Sign in with your Google account, kick off a scan, and surface the senders flooding your inbox with unread emails. From there you can move their messages to Gmail Trash (recoverable for 30 days), permanently delete them, or create Gmail filters to block them — with real-time SSE progress on every action.
 
 ---
 
 ## ⚙️ Features
 
-- 🔐 **Google OAuth 2.0** — Sign in with your Google account; tokens are stored server-side in Redis and expire after 1 hour
+- 🔐 **Google OAuth 2.0** — Sign in with your Google account; tokens are stored server-side and expire after 1 hour
 - 📬 **Inbox Scanner** — Identifies senders with N+ consecutive unread emails via the Gmail API; real-time progress streamed over SSE
-- 🗑️ **Bulk Trash** — Move every message from flagged senders to trash in batches; live deletion progress per sender
+- 🗑️ **Move to Trash** — Move every message from a flagged sender to Gmail Trash (recoverable for 30 days); single-click per sender or bulk
+- ✕ **Delete Forever** — Permanently delete all messages from a sender via Gmail's `batchDelete` API; requires a two-click confirmation to prevent accidents
 - 🚫 **Sender Blocking** — Creates permanent Gmail filters that auto-trash future emails from blocked senders
-- 🧪 **Dry Run Mode** — Preview exactly what would be trashed or blocked without making any changes
+- 🧪 **Dry Run Mode** — Preview exactly what would be moved or deleted without making any changes
 - ⚙️ **Configurable Settings** — Tune the consecutive-unread threshold, max senders to surface, and messages per sender to inspect
 
 ---
@@ -35,14 +36,15 @@ Gmail_Cleaner/
 │       ├── routers/                # API route handlers
 │       │   ├── auth.py             # Google OAuth flow
 │       │   ├── scan.py             # Inbox scan + SSE stream
-│       │   ├── senders.py          # Per-sender and bulk trash/block actions
+│       │   ├── senders.py          # Per-sender and bulk trash/delete/block actions
 │       │   └── settings.py         # User settings
 │       ├── services/               # Gmail API business logic
 │       │   ├── gmail_auth.py       # OAuth URL builder + token exchange
 │       │   ├── gmail_scan.py       # Consecutive-unread detection
-│       │   ├── gmail_trash.py      # Batch message deletion
+│       │   ├── gmail_delete.py     # Permanent batch deletion (batchDelete)
+│       │   ├── gmail_move_to_trash.py  # Recoverable move-to-trash (batchModify)
 │       │   └── gmail_filter.py     # Gmail filter creation (blocking)
-│       ├── store/                  # Redis-backed session store (queues/scan results stay in-memory)
+│       ├── store/                  # Session store (Redis in production, in-memory for dev)
 │       └── tests/                  # Pytest suites
 │           ├── api/                # API-related unit tests
 │           ├── services/           # Service-related unit tests
@@ -70,7 +72,7 @@ Gmail_Cleaner/
 - Python 3.11+
 - Node.js 24+
 - A [Google Cloud](https://console.cloud.google.com) project
-- A Redis instance (local or hosted, e.g. Upstash, Redis Cloud)
+- A Redis instance — required in production; **optional for local development** (see [Running without Redis](#running-without-redis) below)
 
 ---
 
@@ -116,20 +118,24 @@ Gmail_Cleaner/
    GOOGLE_CLIENT_ID=your-client-id
    GOOGLE_CLIENT_SECRET=your-client-secret
    GOOGLE_PROJECT_ID=your-project-id
-   GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
-   FRONTEND_ORIGIN=http://localhost:5173
-   REDIS_URL=redis://localhost:6379
+   GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback  // Default
+   FRONTEND_ORIGIN=http://localhost:5173  // Default
+   SESSION_TTL_SECONDS=3600  // Default
+   REDIS_URL=redis://localhost:6379  // Default
+   USE_REDIS=false
    ```
+
+   > ⚠️ **Note:** Do not use `USE_REDIS=false` in production. In-memory storage is not shared across processes and does not survive restarts.
 
 3. Start the server:
 
    ```bash
    .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000   # Windows
    # or
-   .venv/bin/python -m uvicorn app.main:app --reload --port 8000        # macOS/Linux
+   .venv/bin/python -m uvicorn app.main:app --reload --port 8000       # macOS/Linux
    ```
 
-   API runs on `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+   REST API/SSE runs on `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
 ---
 
@@ -145,10 +151,11 @@ Gmail_Cleaner/
 2. Create a `.env` file in `frontend/`:
 
    ```env
-   VITE_SSE_BASE_URL=http://localhost:8000
+   VITE_SSE_BASE_URL=http://localhost:8000  // Default
+   VITE_API_BASE_URL=/api  // Default
    ```
 
-   > ⚠️ **Note:** Regular API calls go through the Vite dev proxy (`/api → http://localhost:8000`), which is already configured in `vite.config.ts` — no extra env var needed. SSE must connect directly to the backend because the proxy buffers responses and breaks real-time event streaming.
+   > ⚠️ **Note:** Regular API calls go through the Vite dev proxy (`/api → http://localhost:8000`), which is already configured in `vite.config.ts` — no extra environment variable needed. SSE must connect directly to the backend because the proxy buffers responses and breaks real-time event streaming.
 
 3. Run:
    ```bash
@@ -200,34 +207,39 @@ pytest tests/services/test_services.py -q
 pytest tests/services/test_services.py::TestSessionStore::test_create_and_retrieve_session -q
 ```
 
+> Tests use `fakeredis` and never require a live Redis instance.
+
 ---
 
 ## 🔌 API Endpoints
 
 ### REST
 
-| Method  | Endpoint                | Description                                                      |
-| ------- | ----------------------- | ---------------------------------------------------------------- |
-| `GET`   | `/auth/login`           | Returns the Google OAuth authorization URL                       |
-| `POST`  | `/auth/callback`        | Exchanges auth code for tokens; creates a server-side session    |
-| `POST`  | `/auth/logout`          | Revokes token and destroys the session                           |
-| `GET`   | `/auth/me`              | Returns the authenticated user's email                           |
-| `POST`  | `/scan/start`           | Starts a background inbox scan; returns a `scan_id`              |
-| `GET`   | `/scan/{id}/results`    | Polling fallback for completed scan results                      |
-| `GET`   | `/senders/{id}/preview` | Returns subject, snippet, and date of a sender's latest email    |
-| `POST`  | `/senders/{id}/trash`   | Starts a batch-trash job for a sender; returns a `job_id`        |
-| `POST`  | `/senders/{id}/block`   | Creates a Gmail filter to auto-trash future emails from a sender |
-| `POST`  | `/senders/bulk/trash`   | Starts batch-trash jobs for multiple senders; returns `job_id`'s  |
-| `POST`  | `/senders/bulk/block`   | Creates Gmail filters for multiple senders at once               |
-| `POST`  | `/senders/bulk/skip`    | Acknowledges a client-side skip (no Gmail API call made)         |
-| `GET`   | `/settings`             | Returns the current user's settings for this session             |
-| `PATCH` | `/settings`             | Updates one or more settings fields                              |
+| Method  | Endpoint                      | Description                                                            |
+| ------- | ----------------------------- | ---------------------------------------------------------------------- |
+| `GET`   | `/auth/login`                 | Returns the Google OAuth authorization URL                             |
+| `POST`  | `/auth/callback`              | Exchanges auth code for tokens; creates a server-side session          |
+| `POST`  | `/auth/logout`                | Revokes token and destroys the session                                 |
+| `GET`   | `/auth/me`                    | Returns the authenticated user's email                                 |
+| `POST`  | `/scan/start`                 | Starts a background inbox scan; returns a `scan_id`                    |
+| `GET`   | `/scan/{id}/results`          | Polling fallback for completed scan results                            |
+| `GET`   | `/senders/{id}/preview`       | Returns subject, snippet, and date of a sender's latest email          |
+| `POST`  | `/senders/{id}/move-to-trash` | Moves all messages from a sender to Gmail Trash (recoverable, 30 days) |
+| `POST`  | `/senders/{id}/trash`         | Permanently deletes all messages from a sender (irreversible)          |
+| `POST`  | `/senders/{id}/block`         | Creates a Gmail filter to auto-trash future emails from a sender       |
+| `POST`  | `/senders/bulk/move-to-trash` | Starts move-to-trash jobs for multiple senders; returns `job_id`s      |
+| `POST`  | `/senders/bulk/delete`        | Permanently deletes messages for multiple senders; returns `job_id`s   |
+| `POST`  | `/senders/bulk/block`         | Creates Gmail filters for multiple senders at once                     |
+| `POST`  | `/senders/bulk/skip`          | Acknowledges a client-side skip (no Gmail API call made)               |
+| `GET`   | `/settings`                   | Returns the current user's settings for this session                   |
+| `PATCH` | `/settings`                   | Updates one or more settings fields                                    |
 
 ### SSE (Server-Sent Events)
 
 Long-lived connections where the backend streams progress events to the client in real time. Token is passed as a `?token=` query parameter since `EventSource` does not support request headers.
 
-| Method | Endpoint                              | Description                                                                                                                                                                     |
-| ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/scan/{id}/stream`                   | Real-time scan progress; fires `sender_found` events as senders are flagged, then `done` when complete                                                                          |
-| `GET`  | `/senders/{id}/trash/{job_id}/stream` | Deletion progress for a single trash job; used for both individual and bulk trash — the bulk REST endpoint returns multiple `job_id`'s and the frontend opens one stream per job |
+| Method | Endpoint                                      | Description                                                                                                                                                       |
+| ------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/scan/{id}/stream`                           | Real-time scan progress; fires `sender_found` events as senders are flagged, then `done` when complete                                                            |
+| `GET`  | `/senders/{id}/move-to-trash/{job_id}/stream` | Progress for a move-to-trash job; used for both individual and bulk — the bulk REST endpoint returns multiple `job_id`s and the frontend opens one stream per job |
+| `GET`  | `/senders/{id}/trash/{job_id}/stream`         | Progress for a permanent deletion job; same streaming pattern as move-to-trash                                                                                    |

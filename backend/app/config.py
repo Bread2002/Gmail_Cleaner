@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 from typing import List
 
+
 # Define the Settings class using Pydantic for environment variable management and validation
 class Settings(BaseSettings):
     # Configure Pydantic to read from the .env file
@@ -30,7 +31,9 @@ class Settings(BaseSettings):
     # Configure session management
     session_ttl_seconds: int = 3600
     redis_url: str = "redis://localhost:6379"
-    use_redis: bool = True  # Set USE_REDIS=false in .env to run without Redis (local dev only)
+    use_redis: bool = (
+        True  # Set USE_REDIS=false in .env to run without Redis (local dev only)
+    )
 
     # Configure Gmail OAuth scopes
     gmail_scopes: List[str] = [
@@ -55,6 +58,7 @@ class Settings(BaseSettings):
                 "redirect_uris": [self.google_redirect_uri],
             }
         }
+
 
 # Define a singleton instance of the Settings class to be used throughout the application
 settings = Settings()
