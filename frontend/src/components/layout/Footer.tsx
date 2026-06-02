@@ -15,15 +15,16 @@ export function Footer() {
             Copyright © 2026, Rye Stahle-Smith; All rights reserved.
           </p>
         </div>
-        <div className="flex space-x-8">
+        <div className="flex space-x-2">
           <a
-            className=" text-black text-sm hover:text-gray-600 transition-colors"
+            className="text-black text-sm hover:text-gray-600 transition-colors"
             href={`${import.meta.env.VITE_SSE_BASE_URL}/docs`}
           >
             API Documentation
           </a>
+          <a className="text-black text-sm">|</a>
           <a
-            className=" text-black text-sm hover:text-gray-600 transition-colors"
+            className="text-black text-sm hover:text-gray-600 transition-colors"
             href="https://github.com/Bread2002/Gmail_Cleaner"
           >
             GitHub
