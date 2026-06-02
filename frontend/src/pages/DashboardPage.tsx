@@ -62,7 +62,7 @@ export function DashboardPage() {
       {scan.phase === "done" && scan.eventLog.length > 0 && (
         <details className="max-w-xl mx-auto">
           <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
-            Show scan log ({scan.eventLog.length} events)
+            Show Scan Log ({scan.eventLog.length} events)
           </summary>
           <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-0.5 max-h-40 overflow-y-auto">
             {scan.eventLog.map((line, i) => (

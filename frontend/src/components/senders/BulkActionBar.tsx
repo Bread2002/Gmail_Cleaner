@@ -177,13 +177,15 @@ export function BulkActionBar({
         <button
           onClick={onSelectAll}
           className="text-blue-600 hover:underline text-xs"
+          style={{ cursor: "pointer" }}
         >
-          Select all
+          Select All
         </button>
         <span className="text-gray-300">|</span>
         <button
           onClick={onDeselectAll}
           className="text-gray-500 hover:underline text-xs"
+          style={{ cursor: "pointer" }}
         >
           None
         </button>
@@ -208,6 +210,7 @@ export function BulkActionBar({
                 ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
                 : "bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200"
             } disabled:opacity-40 disabled:cursor-not-allowed`}
+          style={{ cursor: "pointer" }}
         >
           {dryRun ? "🧪 Preview Trash" : "🗑️ Move to Trash"}
         </button>
@@ -231,6 +234,7 @@ export function BulkActionBar({
                   ? "bg-red-600 hover:bg-red-700 text-white border border-red-600 animate-pulse"
                   : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
             }`}
+          style={{ cursor: "pointer" }}
         >
           {dryRun
             ? "🧪 Preview Delete"
@@ -243,6 +247,7 @@ export function BulkActionBar({
           onClick={handleBulkBlock}
           disabled={selectedIds.length === 0 || loading}
           className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ cursor: "pointer" }}
         >
           🚫 Block Selected
         </button>
@@ -251,6 +256,7 @@ export function BulkActionBar({
           onClick={handleBulkSkip}
           disabled={selectedIds.length === 0 || loading}
           className="text-xs bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200 px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ cursor: "pointer" }}
         >
           ⏭ Skip Selected
         </button>

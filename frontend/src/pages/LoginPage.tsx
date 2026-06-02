@@ -66,6 +66,7 @@ export function LoginPage() {
           <button
             onClick={login}
             className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 hover:border-blue-400 hover:shadow-md rounded-xl px-5 py-3 text-gray-700 font-semibold transition-all"
+            style={{ cursor: "pointer" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24">
               <path

@@ -20,7 +20,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-8">
+    <div className="max-w-lg mx-auto space-y-3">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 text-sm mt-1">
@@ -60,6 +60,7 @@ export function SettingsPage() {
               update({ consecutive_unread_threshold: Number(e.target.value) })
             }
             className="w-full accent-blue-600"
+            style={{ cursor: "pointer" }}
           />
           <div className="flex justify-between text-xs text-gray-400">
             <span>5 (aggressive)</span>
@@ -88,6 +89,7 @@ export function SettingsPage() {
             value={settings.max_senders}
             onChange={(e) => update({ max_senders: Number(e.target.value) })}
             className="w-full accent-blue-600"
+            style={{ cursor: "pointer" }}
           />
           <div className="flex justify-between text-xs text-gray-400">
             <span>1</span>
@@ -121,6 +123,7 @@ export function SettingsPage() {
               update({ max_messages_per_sender: Number(e.target.value) })
             }
             className="w-full accent-blue-600"
+            style={{ cursor: "pointer" }}
           />
           <div className="flex justify-between text-xs text-gray-400">
             <span>20 (fast)</span>

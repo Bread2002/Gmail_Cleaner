@@ -186,8 +186,9 @@ export function SenderCard({
               <button
                 onClick={() => setExpanded((e) => !e)}
                 className="mt-1.5 text-xs text-blue-500 hover:text-blue-700 transition-colors"
+                style={{ cursor: "pointer" }}
               >
-                {expanded ? "▲ Hide preview" : "▼ Show preview"}
+                {expanded ? "▲ Hide Preview" : "▼ Show Preview"}
               </button>
             )}
           </div>

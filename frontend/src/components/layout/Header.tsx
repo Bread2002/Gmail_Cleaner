@@ -46,6 +46,7 @@ export function Header() {
         <button
           onClick={() => navigate("/settings")}
           className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md transition-colors"
+          style={{ cursor: "pointer" }}
         >
           <span className="sm:hidden">⚙️</span>
           <span className="hidden sm:inline">⚙️ Settings</span>
@@ -53,6 +54,7 @@ export function Header() {
         <button
           onClick={handleLogout}
           className="text-sm bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded-md transition-colors"
+          style={{ cursor: "pointer" }}
         >
           <strong>Sign Out</strong>
         </button>
