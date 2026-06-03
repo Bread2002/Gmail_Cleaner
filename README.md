@@ -118,10 +118,10 @@ Gmail_Cleaner/
    GOOGLE_CLIENT_ID=your-client-id
    GOOGLE_CLIENT_SECRET=your-client-secret
    GOOGLE_PROJECT_ID=your-project-id
-   GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback  // Default
-   FRONTEND_ORIGIN=http://localhost:5173  // Default
-   SESSION_TTL_SECONDS=3600  // Default
-   REDIS_URL=redis://localhost:6379  // Default
+   GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback  # Default
+   FRONTEND_ORIGIN=http://localhost:5173  # Default
+   SESSION_TTL_SECONDS=3600  # Default
+   REDIS_URL=redis://localhost:6379  # Default
    USE_REDIS=false
    ```
 
@@ -151,8 +151,8 @@ Gmail_Cleaner/
 2. Create a `.env` file in `frontend/`:
 
    ```env
-   VITE_SSE_BASE_URL=http://localhost:8000  // Default
-   VITE_API_BASE_URL=/api  // Default
+   VITE_SSE_BASE_URL=http://localhost:8000  # Default
+   VITE_API_BASE_URL=/api  # Default
    ```
 
    > ⚠️ **Note:** Regular API calls go through the Vite dev proxy (`/api → http://localhost:8000`), which is already configured in `vite.config.ts` — no extra environment variable needed. SSE must connect directly to the backend because the proxy buffers responses and breaks real-time event streaming.

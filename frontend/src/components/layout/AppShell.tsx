@@ -11,7 +11,7 @@ import { Footer } from "./Footer";
 // Define the AppShell component that serves as the main layout for the application, including the header and outlet for nested routes
 export function AppShell() {
   return (
-    <div className="min-h-screen bg- flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col">
       <Header />
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
         <Outlet />
