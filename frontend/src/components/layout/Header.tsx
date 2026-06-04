@@ -7,8 +7,12 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 
+interface HeaderProps {
+  onSettingsOpen: () => void;
+}
+
 // Define the Header component that displays the application logo, name, user email, and navigation links
-export function Header() {
+export function Header({ onSettingsOpen }: HeaderProps) {
   const { userEmail, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -44,7 +48,7 @@ export function Header() {
           </span>
         )}
         <button
-          onClick={() => navigate("/settings")}
+          onClick={onSettingsOpen}
           className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md transition-colors"
           style={{ cursor: "pointer" }}
         >

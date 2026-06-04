@@ -24,15 +24,15 @@ export function LoginPage() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-cyan-200 to-blue-400 flex flex-col">
       <div className="flex-1 flex items-center justify-center px-2 py-6">
-        <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-10 w-full max-w-md text-center space-y-6">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-4 w-full max-w-md text-center space-y-2">
           {/* Logo */}
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center">
             <img
               src="/logo.png"
               alt="Gmail Cleaner"
-              className="h-32 w-32 sm:h-60 sm:w-60 rounded-2xl object-contain shadow-md"
+              className="h-70 w-70 sm:h-70 sm:w-70 rounded-2xl object-contain shadow-md"
             />
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 pt-2 pb-1">
               Gmail Cleaner
             </h1>
             <p className="text-gray-500 font-bold text-sm">
@@ -48,7 +48,7 @@ export function LoginPage() {
           )}
 
           {/* Features */}
-          <ul className="text-left text-sm text-gray-600 space-y-2">
+          <ul className="text-sm text-gray-600 space-y-2 pt-1 pb-1 inline-block text-left">
             {[
               "🔍 Scan for senders with excessive unread emails",
               "🗑️ Batch-trash all emails from a sender",
@@ -65,7 +65,7 @@ export function LoginPage() {
           {/* Sign in button */}
           <button
             onClick={login}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 hover:border-blue-400 hover:shadow-md rounded-xl px-5 py-3 text-gray-700 font-semibold transition-all"
+            className="w-full flex items-center justify-center gap-2 bg-white border-2 border-gray-200 hover:border-blue-400 hover:shadow-md rounded-xl px-5 py-3 text-gray-700 font-semibold transition-all"
             style={{ cursor: "pointer" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24">
