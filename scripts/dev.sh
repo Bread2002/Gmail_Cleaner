@@ -100,6 +100,6 @@ if [ -n "$BACKEND_PID" ] || [ -n "$FRONTEND_PID" ]; then
 else
   echo "Both servers are running in their respective terminals:";
   echo -e "Backend (Python/Uvicorn): http://localhost:8000";
-  echo -e "Frontend (Vite) thttp://localhost:5173";
+  echo -e "Frontend (Vite): http://localhost:5173";
   echo "Close either window to stop that server...";
 fi
